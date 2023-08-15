@@ -1,5 +1,5 @@
 local extension = Package("joy_nya")
-extension.extensionName = "joy"
+extension.extensionName = "joym"
 
 Fk:loadTranslationTable{
   ["joy_nya"] = "欢乐-喵",
@@ -867,7 +867,7 @@ local nya__hongyan = fk.CreateFilterSkill{
   name = "nya__hongyan",
   frequency = Skill.Compulsory,
   card_filter = function(self, to_select, player)
-    return to_select.suit == Card.Spade and player:hasSkill(self.name)
+    return player:hasSkill(self.name) and to_select.suit == Card.Spade
   end,
   view_as = function(self, to_select)
     return Fk:cloneCard(to_select.name, Card.Heart, to_select.number)
@@ -933,7 +933,7 @@ local nya__jieyi = fk.CreateActiveSkill{
       else
         local target = Fk:currentRoom():getPlayerById(to_select)
         local card = Fk:getCardById(selected_cards[1])
-        return target:getEquipment(card.sub_type) == nil and #target:getAvailableEquipSlots(card.sub_type) > 0
+        return #target:getAvailableEquipSlots(card.sub_type) > 0
       end
     end
   end,
