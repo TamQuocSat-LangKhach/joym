@@ -1058,31 +1058,25 @@ local nya__luoshen = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
+    local cards = {}
     while true do
       local judge = {
         who = player,
         reason = self.name,
-        pattern = ".|A~K|spade,club",
+        pattern = ".|.|spade,club",
+        skipDrop = true,
       }
       room:judge(judge)
+      table.insert(cards, judge.card)
       if judge.card.color ~= Card.Black or not room:askForSkillInvoke(player, self.name) then
         break
       end
     end
-  end,
-}
-local nya__luoshen_trigger = fk.CreateTriggerSkill{
-  name = "#nya__luoshen_trigger",
-  mute = true,
-  events = {fk.FinishJudge},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and data.reason == "nya__luoshen"
-  end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
-  on_use = function(self, event, target, player, data)
-    player.room:obtainCard(player.id, data.card, true, fk.ReasonJustMove)
+    cards = table.filter(cards, function(card) return room:getCardArea(card.id) == Card.Processing end)
+    if #cards == 0 then return end
+    local dummy = Fk:cloneCard("dilu")
+    dummy:addSubcards(table.map(cards, function(card) return card:getEffectiveId() end))
+    room:obtainCard(player.id, dummy, true, fk.ReasonJustMove)
   end,
 }
 local nya__qingguo = fk.CreateViewAsSkill{
@@ -1129,7 +1123,6 @@ local nya__qingguo = fk.CreateViewAsSkill{
     end
   end,
 }
-nya__luoshen:addRelatedSkill(nya__luoshen_trigger)
 zhenji:addSkill(nya__luoshen)
 zhenji:addSkill(nya__qingguo)
 zhenji:addSkill("nya__play")
