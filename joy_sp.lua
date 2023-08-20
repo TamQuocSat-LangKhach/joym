@@ -106,6 +106,191 @@ Fk:loadTranslationTable{
   ["#joy__huangsi-choose"] = "皇思：你可以令一名角色摸%arg张牌",
 }
 
+local sp__daqiao = General(extension, "joysp__daqiao", "wu", 3, 3, General.Female)
+local joy__yanxiao = fk.CreateActiveSkill{
+  name = "joy__yanxiao",
+  anim_type = "support",
+  card_num = 1,
+  target_num = 1,
+  prompt = "#joy__yanxiao",
+  can_use = function(self, player)
+    return not player:isNude()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).suit == Card.Diamond
+  end,
+  target_filter = function(self, to_select, selected)
+    return #selected == 0 and not Fk:currentRoom():getPlayerById(to_select):hasDelayedTrick("yanxiao_trick")
+  end,
+  on_use = function(self, room, effect)
+    local target = room:getPlayerById(effect.tos[1])
+    local card = Fk:cloneCard("yanxiao_trick")
+    card:addSubcards(effect.cards)
+    target:addVirtualEquip(card)
+    room:moveCardTo(card, Card.PlayerJudge, target, fk.ReasonJustMove, self.name)
+  end,
+}
+local joy__yanxiao_trigger = fk.CreateTriggerSkill{
+  name = "#joy__yanxiao_trigger",
+  mute = true,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player.phase == Player.Judge and player:hasDelayedTrick("yanxiao_trick")
+  end,
+  on_cost = function(self, event, target, player, data)
+    return true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:broadcastSkillInvoke("joy__yanxiao")
+    room:notifySkillInvoked(player, "joy__yanxiao")
+    local dummy = Fk:cloneCard("dilu")
+    dummy:addSubcards(player:getCardIds("j"))
+    room:obtainCard(player.id, dummy, true, fk.ReasonJustMove)
+    local judge = {
+      who = player,
+      reason = "joy__yanxiao",
+    }
+    room:judge(judge)
+    if judge.card.color == Card.Red then
+      player:drawCards(1, "joy__yanxiao")
+    elseif judge.card.color == Card.Black then
+      room:setPlayerMark(player, "joy__yanxiao-turn", 1)
+    end
+  end,
+}
+local joy__yanxiao_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__yanxiao_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:getMark("joy__yanxiao-turn") > 0 and scope == Player.HistoryPhase then
+      return 1
+    end
+    return 0
+  end,
+}
+local joy__guose = fk.CreateTriggerSkill{
+  name = "joy__guose",
+  frequency = Skill.Compulsory,
+  anim_type = "drawcard",
+  events = {fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self.name) then
+      for _, move in ipairs(data) do
+        if move.from == player.id and move.extra_data and move.extra_data.joy__guose then
+          return true
+        end
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local n = 0
+    for _, move in ipairs(data) do
+      if move.from == player.id and move.extra_data and move.extra_data.joy__guose then
+        n = n + move.extra_data.joy__guose
+      end
+    end
+    player:drawCards(n, self.name)
+  end,
+
+  refresh_events = {fk.BeforeCardsMove},
+  can_refresh = function(self, event, target, player, data)
+    if player:hasSkill(self.name) then
+      for _, move in ipairs(data) do
+        if move.from == player.id then
+          for _, info in ipairs(move.moveInfo) do
+            if (info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerEquip) and Fk:getCardById(info.cardId).suit == Card.Diamond then
+              return true
+            end
+          end
+        end
+      end
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    for _, move in ipairs(data) do
+      if move.from == player.id then
+        local n = 0
+        for _, info in ipairs(move.moveInfo) do
+          if (info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerEquip) and Fk:getCardById(info.cardId).suit == Card.Diamond then
+            n = n + 1
+          end
+        end
+        if n > 0 then
+          move.extra_data = move.extra_data or {}
+          move.extra_data.joy__guose = n
+        end
+      end
+    end
+  end,
+}
+local joy__anxian = fk.CreateTriggerSkill{
+  name = "joy__anxian",
+  mute = true,
+  events = {fk.TargetSpecifying, fk.TargetConfirming},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self.name) and data.card and data.card.trueName == "slash" then
+      if event == fk.TargetSpecifying then
+        return not table.contains(data.card.skillNames, self.name)
+      else
+        return not player:isNude()
+      end
+    end
+  end,
+  on_trigger = function(self, event, target, player, data)
+    if event == fk.TargetSpecifying then
+      for _, id in ipairs(AimGroup:getAllTargets(data.tos)) do
+        local p = player.room:getPlayerById(id)
+        if not player.dead and player:hasSkill(self.name) and not p.dead and not p:isKongcheng() then
+          self:doCost(event, target, player, id)
+        end
+      end
+    else
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TargetSpecifying then
+      return room:askForSkillInvoke(player, self.name, nil, "#joy__anxian1-invoke::"..data)
+    else
+      local card = room:askForDiscard(player, 1, 1, true, self.name, true, ".",
+        "#joy__anxian2-invoke::"..data.from..":"..data.card:toLogString(), true)
+      if #card > 0 then
+        self.cost_data = card
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TargetSpecifying then
+      room:broadcastSkillInvoke(self.name, 1)
+      room:notifySkillInvoked(player, self.name, "control")
+      local p = room:getPlayerById(data)
+      if not p:isKongcheng() then
+        room:askForDiscard(p, 1, 1, false, self.name, false)
+      end
+    else
+      room:broadcastSkillInvoke(self.name, 2)
+      room:notifySkillInvoked(player, self.name, "defensive")
+      table.insertIfNeed(data.nullifiedTargets, player.id)
+      local suit = Fk:getCardById(self.cost_data[1]).suit
+      room:throwCard(self.cost_data, self.name, player, player)
+      local from = room:getPlayerById(data.from)
+      if not from.dead then
+        from:drawCards(1, self.name)
+      end
+      if not player.dead and not from.dead and suit == Card.Diamond then
+        room:useVirtualCard("slash", nil, player, from, self.name, true)
+      end
+    end
+  end
+}
+joy__yanxiao:addRelatedSkill(joy__yanxiao_trigger)
+joy__yanxiao:addRelatedSkill(joy__yanxiao_targetmod)
+sp__daqiao:addSkill(joy__yanxiao)
+sp__daqiao:addSkill(joy__guose)
+sp__daqiao:addSkill(joy__anxian)
 Fk:loadTranslationTable{
   ["joysp__daqiao"] = "大乔",
   ["joy__yanxiao"] = "言笑",
@@ -116,6 +301,9 @@ Fk:loadTranslationTable{
   ["joy__anxian"] = "安娴",
   [":joy__anxian"] = "当你不以此法使用【杀】指定目标时，你可以令目标弃置一张手牌；当你成为【杀】的目标时，你可以弃置一张牌令之无效，然后使用者"..
   "摸一张牌，若你弃置的是<font color='red'>♦</font>牌，你视为对其使用一张【杀】。",
+  ["#joy__yanxiao"] = "言笑：你可以将一张<font color='red'>♦</font>牌置于一名角色的判定区内，其判定阶段开始时获得判定区内所有牌",
+  ["#joy__anxian1-invoke"] = "安娴：你可以令 %dest 弃置一张手牌",
+  ["#joy__anxian2-invoke"] = "安娴：你可以弃置一张牌令 %dest 对你使用的%arg无效，若弃置的是<font color='red'>♦</font>，你视为对其使用【杀】",
 }
 
 Fk:loadTranslationTable{
@@ -412,17 +600,17 @@ Fk:loadTranslationTable{
 Fk:loadTranslationTable{
   ["joy__libai"] = "李白",
   ["joy__shixian"] = "诗仙",
-  [":joy__shixian"] = "锁定技，回合开始时，你清除已有的诗篇并亮出牌堆顶四张牌，根据花色创作对应的诗篇：<font color='red'>♥</font>《静夜思》；"..
+  [":joy__shixian"] = "锁定技，准备阶段，你清除已有的诗篇并亮出牌堆顶四张牌，根据花色创作对应的诗篇：<font color='red'>♥</font>《静夜思》；"..
   "<font color='red'>♦</font>《行路难》；♠《侠客行》；♣《将进酒》。然后你获得其中重复花色的牌。",
   ["jingyesi"] = "静夜思",
   [":jingyesi"] = "出牌阶段结束时，你可以观看牌堆顶一张牌，然后可以使用此牌；弃牌阶段结束时，你获得牌堆底的一张牌。",
   ["xinglunan"] = "行路难",
-  [":xinglunan"] = "锁定技，你的回合外，当其他角色对你使用的【杀】结算后，直到你的回合开始，其他角色计算与你的距离+1。",
+  [":xinglunan"] = "锁定技，你的回合外，当其他角色对你使用【杀】结算后，直到你的回合开始，其他角色计算与你的距离+1。",
   ["xiakexing"] = "侠客行",
-  [":xiakexing"] = "当你使用了牌名中有“剑”的武器时，你视为使用一张【万箭齐发】；当你使用【杀】造成伤害后，若你装备了武器，"..
-  "你可以与其拼点：若你赢，其减1点体力上限；若你没赢，则弃置你装备区内的武器。",
+  [":xiakexing"] = "当你使用牌名中有“剑”的武器时，你视为使用一张【万箭齐发】；当你使用【杀】造成伤害后，若你装备了武器，你可以与其拼点："..
+  "若你赢，其减1点体力上限；若你没赢，则弃置你装备区内的武器。",
   ["qiangjinjiu"] = "将进酒",
-  [":qiangjinjiu"] = "其他角色回合开始时，你可以弃置一张手牌并选择一项：1.弃置其装备区内所有的装备，令其从牌堆中获得一张【酒】；"..
+  [":qiangjinjiu"] = "其他角色准备阶段，你可以弃置一张手牌并选择一项：1.弃置其装备区内所有的装备，令其从牌堆中获得一张【酒】；"..
   "2.获得其手牌中所有【酒】，若其手牌中没有【酒】，则改为获得其一张牌。",
 }
 
