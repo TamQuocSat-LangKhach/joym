@@ -9,6 +9,19 @@ Fk:loadTranslationTable{
 
 --几乎全新技能组的武将
 --于吉 左慈 甘夫人 SP大乔 SP小乔 SP甄姬 神张辽 神典韦 神孙权 神大小乔 神华佗 神貂蝉
+Fk:loadTranslationTable{
+  ["joy__yuji"] = "于吉",
+  ["joy__guhuo"] = "蛊惑",
+  [":joy__guhuo"] = "每回合限一次，当你使用伤害牌结算后，你摸一张牌；若此牌未造成伤害，则将此牌移出游戏，本回合结束后获得之。",
+}
+
+Fk:loadTranslationTable{
+  ["joy__zuoci"] = "左慈",
+  ["joy__shendao"] = "神道",
+  [":joy__shendao"] = "你的判定牌生效前，你可以将判定结果修改为任意花色。",
+  ["joy__xinsheng"] = "新生",
+  [":joy__xinsheng"] = "当你受到伤害后，你可以亮出牌堆顶三张牌，然后获得其中花色不同的牌各一张。",
+}
 
 local ganfuren = General(extension, "joy__ganfuren", "shu", 3, 3, General.Female)
 local joy__shushen = fk.CreateTriggerSkill{
@@ -306,6 +319,106 @@ Fk:loadTranslationTable{
   ["#joy__anxian2-invoke"] = "安娴：你可以弃置一张牌令 %dest 对你使用的%arg无效，若弃置的是<font color='red'>♦</font>，你视为对其使用【杀】",
 }
 
+local sp__xiaoqiao = General(extension, "joysp__xiaoqiao", "wu", 3, 3, General.Female)
+local joy__xingwu = fk.CreateActiveSkill{
+  name = "joy__xingwu",
+  anim_type = "offensive",
+  card_num = 1,
+  target_num = 1,
+  prompt = "#joy__xingwu",
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isKongcheng()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:currentRoom():getCardArea(to_select) == Player.Hand and not Self:prohibitDiscard(Fk:getCardById(to_select))
+  end,
+  target_filter = function(self, to_select, selected)
+    return #selected == 0 and to_select ~= Self.id
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    room:throwCard(effect.cards, self.name, player, player)
+    if player.dead then return end
+    player:turnOver()
+    if player.dead then return end
+    if #target:getCardIds("e") > 0 then
+      local id = room:askForCardChosen(player, target, "e", self.name)
+      room:throwCard({id}, self.name, target, player)
+    end
+    if target.dead then return end
+    local n = target.gender == General.Male and 2 or 1
+    room:damage{
+      from = player,
+      to = target,
+      damage = n,
+      skillName = self.name,
+    }
+  end,
+}
+local joy__luoyan = fk.CreateTriggerSkill{
+  name = "joy__luoyan",
+  anim_type = "special",
+  frequency = Skill.Compulsory,
+  events = {fk.AfterSkillEffect},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self.name) and data.name == "joy__xingwu"
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local skills = {}
+    for _, s in ipairs({"joyex__tianxiang", "joyex__hongyan"}) do
+      if not player:hasSkill(s, true) then
+        table.insert(skills, s)
+      end
+    end
+    if #skills == 0 then return end
+    room:setPlayerMark(player, "joy__luoyan", skills)
+    room:handleAddLoseSkills(player, table.concat(skills, "|"), nil, true, false)
+  end,
+
+  refresh_events = {fk.EventPhaseStart},
+  can_refresh = function (self, event, target, player, data)
+    return target == player and player.phase == Player.Play and player:getMark("joy__luoyan") ~= 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    local room = player.room
+    local skills = player:getMark("joy__luoyan")
+    room:setPlayerMark(player, "joy__luoyan", 0)
+    room:handleAddLoseSkills(player, "-"..table.concat(skills, "|-"), nil, true, false)
+  end,
+}
+local joy__huimou = fk.CreateTriggerSkill{
+  name = "joy__huimou",
+  anim_type = "support",
+  events = {fk.CardUseFinished, fk.CardRespondFinished, fk.SkillEffect},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self.name) and player.phase == Player.NotActive and
+      table.find(player.room.alive_players, function(p) return not p.faceup end) then
+      if event == fk.SkillEffect then
+        return data.name == "joyex__tianxiang"
+      else
+        return data.card.suit == Card.Heart
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:askForChoosePlayers(player, table.map(table.filter(room.alive_players, function(p)
+      return not p.faceup end), function(p) return p.id end),
+      1, 1, "#joy__huimou-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:getPlayerById(self.cost_data):turnOver()
+  end,
+}
+sp__xiaoqiao:addSkill(joy__xingwu)
+sp__xiaoqiao:addSkill(joy__luoyan)
+sp__xiaoqiao:addSkill(joy__huimou)
 Fk:loadTranslationTable{
   ["joysp__xiaoqiao"] = "小乔",
   ["joy__xingwu"] = "星舞",
@@ -314,6 +427,8 @@ Fk:loadTranslationTable{
   [":joy__luoyan"] = "锁定技，当你发动〖星舞〗后，直到你下个出牌阶段开始时，你获得〖天香〗和〖红颜〗。",
   ["joy__huimou"] = "回眸",
   [":joy__huimou"] = "当你于回合外使用或打出<font color='red'>♥</font>牌后，或当你发动〖天香〗时，你可以令一名武将牌背面朝上的角色翻至正面。",
+  ["#joy__xingwu"] = "星舞：弃置一张手牌并翻面，弃置一名其他角色装备区内一张牌，对其造成伤害",
+  ["#joy__huimou-choose"] = "回眸：你可以令一名武将牌背面朝上的角色翻至正面",
 }
 
 local sp__zhenji = General(extension, "joysp__zhenji", "qun", 3, 3, General.Female)

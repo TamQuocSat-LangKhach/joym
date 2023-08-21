@@ -186,6 +186,74 @@ Fk:loadTranslationTable{
   ["#joyex__lijian"] = "离间：弃置一张牌，选择两名角色，视为第二名角色对第一名角色使用【决斗】",
 }
 
+local xiaoqiao = General(extension, "joyex__xiaoqiao", "wu", 3, 3, General.Female)
+local joyex__tianxiang = fk.CreateTriggerSkill{
+  name = "joyex__tianxiang",
+  anim_type = "defensive",
+  events = {fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self.name) and target == player
+  end,
+  on_cost = function(self, event, target, player, data)
+    local tar, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
+      return p.id end), 1, 1, ".|.|heart|hand", "#joyex__tianxiang-choose", self.name, true)
+    if #tar > 0 and card then
+      self.cost_data = {tar[1], card}
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data[1])
+    room:throwCard(self.cost_data[2], self.name, player, player)
+    local damage = table.simpleClone(data)
+    damage.to = to
+    room:damage(damage)
+    if not to.dead then
+      local n = 1
+      if not player.dead then
+        local choice = room:askForChoice(player, {"1", tostring(math.min(to:getLostHp(), 5))}, self.name, "#joyex__tianxiang-choice::"..to.id)
+        n = tonumber(choice)
+      end
+      to:drawCards(n, self.name)
+    end
+    return true
+  end,
+}
+local joyex__hongyan = fk.CreateFilterSkill{
+  name = "joyex__hongyan",
+  frequency = Skill.Compulsory,
+  card_filter = function(self, to_select, player)
+    return to_select.suit == Card.Spade and player:hasSkill(self.name)
+  end,
+  view_as = function(self, to_select)
+    return Fk:cloneCard(to_select.name, Card.Heart, to_select.number)
+  end,
+}
+local joyex__hongyan_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joyex__hongyan_maxcards",
+  frequency = Skill.Compulsory,
+  fixed_func = function(self, player)
+    if player:hasSkill("joyex__hongyan") and table.find(player:getCardIds("e"), function(id)
+      return Fk:getCardById(id).suit == Card.Heart or Fk:getCardById(id).suit == Card.Spade end) then  --FIXME: 耦！
+      return player.maxHp
+    end
+  end
+}
+joyex__hongyan:addRelatedSkill(joyex__hongyan_maxcards)
+xiaoqiao:addSkill(joyex__tianxiang)
+xiaoqiao:addSkill(joyex__hongyan)
+Fk:loadTranslationTable{
+  ["joyex__xiaoqiao"] = "界小乔",
+  ["joyex__tianxiang"] = "天香",
+  [":joyex__tianxiang"] = "当你受到伤害时，你可以弃置一张<font color='red'>♥</font>手牌，将此伤害转移给一名其他角色，然后你选择一项："..
+  "1.其摸一张牌；2.其摸X张牌（X为其已损失体力值且至多为5）。",
+  ["joyex__hongyan"] = "红颜",
+  [":joyex__hongyan"] = "锁定技，你的♠牌视为<font color='red'>♥</font>牌。若你的装备区有<font color='red'>♥</font>牌，你的手牌上限等于体力上限。",
+  ["#joyex__tianxiang-choose" ] = "天香：弃置一张<font color='red'>♥</font>手牌将此伤害转移给一名其他角色，然后令其摸一张牌或X张牌（X为其已损失体力值）",
+  ["#joyex__tianxiang-choice"] = "天香：选择令 %dest 摸牌数",
+}
+
 local xuhuang = General(extension, "joyex__xuhuang", "wei", 4)
 local joyex__duanliang = fk.CreateViewAsSkill{
   name = "joyex__duanliang",
