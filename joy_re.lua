@@ -219,6 +219,49 @@ Fk:loadTranslationTable{
   [":joy__feifu"] = "你可以将一张黑色牌当【闪】使用或打出。",
 }
 
+local zhoufang = General(extension, "joy__zhoufang", "wu", 3)
+local joy__youdi = fk.CreateTriggerSkill{
+  name = "joy__youdi",
+  anim_type = "control",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self.name) and player.phase == Player.Finish and not player:isKongcheng()
+  end,
+  on_cost = function(self, event, target, player, data)
+    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), function(p)
+      return p.id end), 1, 1, "#joy__youdi-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data)
+    local card = room:askForCardChosen(to, player, "h", self.name)
+    room:throwCard({card}, self.name, player, to)
+    if player.dead or to.dead then return end
+    if Fk:getCardById(card).trueName ~= "slash" and not to:isNude() then
+      local card2 = room:askForCardChosen(player, to, "he", self.name)
+      room:obtainCard(player, card2, false, fk.ReasonPrey)
+      if player.dead then return end
+      player:drawCards(1, self.name)
+    end
+    if Fk:getCardById(card).color ~= Card.Black and player.maxHp < 5 and not player.dead then
+      room:changeMaxHp(player, 1)
+    end
+  end,
+}
+zhoufang:addSkill("duanfa")
+zhoufang:addSkill(joy__youdi)
+Fk:loadTranslationTable{
+  ["joy__zhoufang"] = "周鲂",
+  ["joy__youdi"] = "诱敌",
+  [":joy__youdi"] = "结束阶段，你可以令一名其他角色弃置你一张手牌，若弃置的牌不是【杀】，则你获得其一张牌并摸一张牌；若弃置的牌不是黑色，"..
+  "则你增加1点体力上限（最多为5）。",
+  ["#joy__youdi-choose"] = "诱敌：令一名角色弃置你手牌，若不是【杀】，你获得其一张牌并摸一张牌；若不是黑色，你加1点体力上限",
+}
+
 local tangji = General(extension, "joy__tangji", "qun", 3, 3, General.Female)
 local joy__kangge = fk.CreateTriggerSkill{
   name = "joy__kangge",
@@ -354,6 +397,118 @@ Fk:loadTranslationTable{
   ["#joy__kangge-invoke"] = "抗歌：你可以令 %dest 回复体力至1",
   ["#joy__jielie-invoke"] = "节烈：你可以防止你受到的伤害并失去1点体力",
   ["#joy__jielie-choice"] = "节烈：选择一种花色，令“抗歌”角色 %dest 从弃牌堆获得%arg张此花色牌",
+}
+
+local zhangxuan = General(extension, "joy__zhangxuan", "wu", 4, 4, General.Female)
+local joy__tongli = fk.CreateTriggerSkill{
+  name = "joy__tongli",
+  anim_type = "offensive",
+  events = {fk.TargetSpecified},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self.name) and player.phase == Player.Play and data.firstTarget and
+      (data.card.type == Card.TypeBasic or data.card:isCommonTrick()) then
+      if data.extra_data and data.extra_data.joy__tongli then return end
+      local suits = {}
+      for _, id in ipairs(player:getCardIds("h")) do
+        if Fk:getCardById(id).suit ~= Card.NoSuit then
+          table.insertIfNeed(suits, Fk:getCardById(id).suit)
+        end
+      end
+      return #suits == player:getMark("@joy__tongli-turn")
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    data.extra_data = data.extra_data or {}
+    data.extra_data.joy__tongli = player:getMark("@joy__tongli-turn")
+  end,
+
+  refresh_events = {fk.AfterCardUseDeclared, fk.CardUseFinished},
+  can_refresh = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self.name) then
+      if event == fk.AfterCardUseDeclared then
+        return player.phase == Player.Play and not table.contains(data.card.skillNames, self.name)
+      else
+        return target == player and data.extra_data and data.extra_data.joy__tongli
+      end
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.AfterCardUseDeclared then
+      room:addPlayerMark(player, "@joy__tongli-turn", 1)
+    else
+      local n = data.extra_data.joy__tongli
+      for i = 1, n, 1 do
+        if data.card.name == "amazing_grace" then
+          --room.logic:trigger(fk.CardUseFinished, player, data)  玩点枣祗&任峻
+          table.forEach(room.players, function(p) room:closeAG(p) end)  --手动五谷
+          if data.extra_data and data.extra_data.AGFilled then
+            local toDiscard = table.filter(data.extra_data.AGFilled, function(id) return room:getCardArea(id) == Card.Processing end)
+            if #toDiscard > 0 then
+              room:moveCards({
+                ids = toDiscard,
+                toArea = Card.DiscardPile,
+                moveReason = fk.ReasonPutIntoDiscardPile,
+              })
+            end
+          end
+          data.extra_data.AGFilled = nil
+
+          local toDisplay = room:getNCards(#TargetGroup:getRealTargets(data.tos))
+          room:moveCards({
+            ids = toDisplay,
+            toArea = Card.Processing,
+            moveReason = fk.ReasonPut,
+          })
+          table.forEach(room.players, function(p) room:fillAG(p, toDisplay) end)
+          data.extra_data = data.extra_data or {}
+          data.extra_data.AGFilled = toDisplay
+        end
+        room:doCardUseEffect(data)
+      end
+      data.extra_data.joy__tongli = false
+    end
+  end,
+}
+local joy__shezang = fk.CreateTriggerSkill{
+  name = "joy__shezang",
+  anim_type = "drawcard",
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self.name) and (target == player or player.phase ~= Player.NotActive) and
+      player:usedSkillTimes(self.name, Player.HistoryTurn) == 0
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local suits = {"spade", "club", "heart", "diamond"}
+    local cards = {}
+    while #suits > 0 do
+      local pattern = table.random(suits)
+      table.removeOne(suits, pattern)
+      table.insertTable(cards, room:getCardsFromPileByRule(".|.|"..pattern))
+    end
+    if #cards > 0 then
+      room:moveCards({
+        ids = cards,
+        to = player.id,
+        toArea = Card.PlayerHand,
+        moveReason = fk.ReasonJustMove,
+        proposer = player.id,
+        skillName = self.name,
+      })
+    end
+  end,
+}
+zhangxuan:addSkill(joy__tongli)
+zhangxuan:addSkill(joy__shezang)
+Fk:loadTranslationTable{
+  ["joy__zhangxuan"] = "张嫙",
+  ["joy__tongli"] = "同礼",
+  [":joy__tongli"] = "出牌阶段，当你使用牌指定目标后，若你手牌中的花色数等于你此阶段已使用牌的张数，你可令此牌效果额外执行X次（X为你手牌中的花色数，"..
+  "目标发生变化仍生效）。",
+  ["joy__shezang"] = "奢葬",
+  [":joy__shezang"] = "每回合限一次，当你或你回合内有角色进入濒死状态时，你可以从牌堆获得不同花色的牌各一张。",
+  ["@joy__tongli-turn"] = "同礼",
 }
 
 return extension

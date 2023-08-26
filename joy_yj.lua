@@ -163,4 +163,120 @@ Fk:loadTranslationTable{
   ["#joy__qiuyuan-give"] = "求援：你需交给 %src 一张【闪】，否则你也成为此%arg目标并弃置一张牌",
 }
 
+local sundeng = General(extension, "joy__sundeng", "wu", 4)
+local joy__kuangbi = fk.CreateActiveSkill{
+  name = "joy__kuangbi",
+  anim_type = "control",
+  card_num = 0,
+  target_num = 1,
+  prompt = "#joy__kuangbi",
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  card_filter = function(self, to_select, selected)
+    return false
+  end,
+  target_filter = function(self, to_select, selected, selected_cards)
+    return #selected == 0 and to_select ~= Self.id and not Fk:currentRoom():getPlayerById(to_select):isNude()
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local cards = room:askForCard(target, 1, 3, true, self.name, false, ".", "#joy__kuangbi-card:"..player.id)
+    local dummy = Fk:cloneCard("dilu")
+    dummy:addSubcards(cards)
+    player:addToPile(self.name, dummy, false, self.name)
+    if player.dead or target.dead then return end
+    if room:askForSkillInvoke(player, self.name, nil, "#joy__kuangbi-draw::"..target.id..":"..#dummy.subcards) then
+      target:drawCards(#dummy.subcards, self.name)
+    end
+  end,
+}
+local joy__kuangbi_trigger = fk.CreateTriggerSkill {
+  name = "#joy__kuangbi_trigger",
+  mute = true,
+  events = {fk.TurnStart, fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.TurnStart then
+      return target == player and #player:getPile("joy__kuangbi") > 0
+    elseif player:hasSkill("joy__kuangbi") and (table.every(player:getCardIds("h"), function(id)
+      return Fk:getCardById(id):getMark("@@joy__kuangbi") == 0 end)) then
+      for _, move in ipairs(data) do
+        if move.from == player.id and move.extra_data and move.extra_data.joy__kuangbi then
+          return true
+        end
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    return true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke("joy__kuangbi")
+    room:notifySkillInvoked(player, "joy__kuangbi", "support")
+    if event == fk.TurnStart then
+      local dummy = Fk:cloneCard("dilu")
+      dummy:addSubcards(player:getPile("joy__kuangbi"))
+      for _, id in ipairs(player:getPile("joy__kuangbi")) do
+        room:setCardMark(Fk:getCardById(id), "@@joy__kuangbi", 1)
+      end
+      room:obtainCard(player, dummy, false, fk.ReasonJustMove)
+    else
+      player:drawCards(1, "joy__kuangbi")
+      if player:isWounded() and not player.dead then
+        room:recover{
+          who = player,
+          num = 1,
+          recoverBy = player,
+          skillName = "joy__kuangbi",
+        }
+      end
+    end
+  end,
+
+  refresh_events = {fk.BeforeCardsMove},
+  can_refresh = function(self, event, target, player, data)
+    if player:hasSkill("joy__kuangbi") then
+      for _, move in ipairs(data) do
+        if move.from == player.id then
+          for _, info in ipairs(move.moveInfo) do
+            if info.fromArea == Card.PlayerHand and Fk:getCardById(info.cardId):getMark("@@joy__kuangbi") > 0 then
+              return true
+            end
+          end
+        end
+      end
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    for _, move in ipairs(data) do
+      if move.from == player.id then
+        local yes = false
+        for _, info in ipairs(move.moveInfo) do
+          if info.fromArea == Card.PlayerHand and Fk:getCardById(info.cardId):getMark("@@joy__kuangbi") > 0 then
+            player.room:setCardMark(Fk:getCardById(info.cardId), "@@joy__kuangbi", 0)
+            yes = true
+          end
+        end
+        if yes then
+          move.extra_data = move.extra_data or {}
+          move.extra_data.joy__kuangbi = true
+        end
+      end
+    end
+  end,
+}
+joy__kuangbi:addRelatedSkill(joy__kuangbi_trigger)
+sundeng:addSkill(joy__kuangbi)
+Fk:loadTranslationTable{
+  ["joy__sundeng"] = "孙登",
+  ["joy__kuangbi"] = "匡弼",
+  [":joy__kuangbi"] = "出牌阶段限一次，你可以令一名其他角色将其一至三张牌置于你的武将牌上，然后你可令其摸等量的牌。你的回合开始时，"..
+  "你获得武将牌上的所有牌。当你失去手牌中最后一张“匡弼”牌时，你摸一张牌并回复1点体力。",
+  ["#joy__kuangbi"] = "匡弼：令一名角色将至多三张牌置为“匡弼”牌，你可以令其摸等量牌，你回合开始时获得“匡弼”牌",
+  ["#joy__kuangbi-card"] = "匡弼：将至多三张牌置为 %src 的“匡弼”牌",
+  ["#joy__kuangbi-draw"] = "匡弼：是否令 %dest 摸%arg张牌？",
+  ["@@joy__kuangbi"] = "匡弼",
+}
 return extension
