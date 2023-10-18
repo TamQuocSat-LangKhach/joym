@@ -1058,27 +1058,32 @@ local nya__luoshen = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local cards = {}
     while true do
       local judge = {
         who = player,
         reason = self.name,
         pattern = ".|.|spade,club",
-        skipDrop = true,
       }
       room:judge(judge)
-      table.insert(cards, judge.card)
       if judge.card.color ~= Card.Black or not room:askForSkillInvoke(player, self.name) then
         break
       end
     end
-    cards = table.filter(cards, function(card) return room:getCardArea(card.id) == Card.Processing end)
-    if #cards == 0 then return end
-    local dummy = Fk:cloneCard("dilu")
-    dummy:addSubcards(table.map(cards, function(card) return card:getEffectiveId() end))
-    room:obtainCard(player.id, dummy, true, fk.ReasonJustMove)
   end,
 }
+local nya__luoshen_obtain = fk.CreateTriggerSkill{
+  name = "#nya__luoshen_obtain",
+  mute = true,
+  frequency = Skill.Compulsory,
+  events = {fk.FinishJudge},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and data.reason == "nya__luoshen"
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:obtainCard(player.id, data.card)
+  end,
+}
+nya__luoshen:addRelatedSkill(nya__luoshen_obtain)
 local nya__qingguo = fk.CreateViewAsSkill{
   name = "nya__qingguo",
   anim_type = "defensive",
@@ -1094,7 +1099,7 @@ local nya__qingguo = fk.CreateViewAsSkill{
     else
       return false
     end
-    return (Fk.currentResponsePattern == nil and c.skill:canUse(Self)) or
+    return (Fk.currentResponsePattern == nil and Self:canUse(c)) or
       (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(c))
   end,
   view_as = function(self, cards)
@@ -1114,13 +1119,7 @@ local nya__qingguo = fk.CreateViewAsSkill{
     return not player:hasSkill("nya__play", true)
   end,
   enabled_at_response = function(self, player, response)
-    if Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):matchExp(self.pattern) then
-      if Exppattern:Parse(Fk.currentResponsePattern):match(Fk:cloneCard("peach")) then
-        return not response and not player:hasSkill("nya__play", true)
-      else
-        return true
-      end
-    end
+    return true
   end,
 }
 zhenji:addSkill(nya__luoshen)
@@ -1133,6 +1132,8 @@ Fk:loadTranslationTable{
   "发动〖洛神〗。",
   ["nya__qingguo"] = "倾国",
   [":nya__qingguo"] = "你可以将一张黑色牌当【闪】使用或打出；若你没有〖逗猫〗，你可以将一张【闪】当【桃】使用。",
+
+  ["nya__luoshen_obtain"] = "洛神",
 }
 
 local zhangchunhua = General(extension, "nya__zhangchunhua", "wei", 3, 3, General.Female)
