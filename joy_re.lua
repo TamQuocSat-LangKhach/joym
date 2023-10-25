@@ -288,7 +288,7 @@ local joy__kangge = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke(self.name)
+    player:broadcastSkillInvoke(self.name)
     if event == fk.TurnStart then
       room:notifySkillInvoked(player, self.name, "special")
       for _, p in ipairs(room:getOtherPlayers(player)) do
@@ -333,7 +333,7 @@ local joy__kangge_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("joy__kangge")
+    player:broadcastSkillInvoke("joy__kangge")
     room:notifySkillInvoked(player, "joy__kangge", "support")
     room:doIndicate(player.id, {target.id})
     room:recover({

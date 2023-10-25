@@ -455,7 +455,7 @@ local nya__qiangwu_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("nya__qiangwu")
+    player:broadcastSkillInvoke("nya__qiangwu")
     room:notifySkillInvoked(player, "nya__qiangwu", "drawcard")
     player:drawCards(1, "nya__qiangwu")
   end,
@@ -506,7 +506,7 @@ local nya__juxiang = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke(self.name)
+    player:broadcastSkillInvoke(self.name)
     if event == fk.PreCardEffect then
       room:notifySkillInvoked(player, self.name, "defensive")
       return true
@@ -633,19 +633,14 @@ local nya__jizhi = fk.CreateTriggerSkill{
 }
 local nya__jizhi_trigger = fk.CreateTriggerSkill{
   name = "#nya__jizhi_trigger",
-  mute = true,
+  main_skill = nya__jizhi,
   events = {fk.CardUsing},
   can_trigger = function(self, event, target, player, data)
     return player:hasSkill("nya__jizhi") and target ~= player and data.card.type == Card.TypeTrick and
       player:usedSkillTimes(self.name, Player.HistoryTurn) == 0
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost =Util.TrueFunc,
   on_use = function(self, event, target, player, data)
-    local room = player.room
-    room:broadcastSkillInvoke("nya__jizhi")
-    room:notifySkillInvoked(player, "nya__jizhi")
     player:drawCards(1, "nya__jizhi")
   end,
 }
@@ -682,7 +677,7 @@ local nya__qicai_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("nya__qicai")
+    player:broadcastSkillInvoke("nya__qicai")
     if event == fk.BeforeCardsMove then
       for _, move in ipairs(data) do
         for i = #move.moveInfo, 1, -1 do
@@ -883,7 +878,7 @@ local nya__hongyan_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("nya__hongyan")
+    player:broadcastSkillInvoke("nya__hongyan")
     room:notifySkillInvoked(player, "nya__hongyan", "support")
     if player:isWounded() then
       room:recover{

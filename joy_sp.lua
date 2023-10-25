@@ -70,7 +70,7 @@ local joy__shushen_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("joy__shushen")
+    player:broadcastSkillInvoke("joy__shushen")
     room:notifySkillInvoked(player, "joy__shushen")
     room:getPlayerById(self.cost_data):drawCards(1, "joy__shushen")
   end,
@@ -155,7 +155,7 @@ local joy__yanxiao_trigger = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    room:broadcastSkillInvoke("joy__yanxiao")
+    player:broadcastSkillInvoke("joy__yanxiao")
     room:notifySkillInvoked(player, "joy__yanxiao")
     local dummy = Fk:cloneCard("dilu")
     dummy:addSubcards(player:getCardIds("j"))
@@ -277,14 +277,14 @@ local joy__anxian = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     if event == fk.TargetSpecifying then
-      room:broadcastSkillInvoke(self.name, 1)
+      player:broadcastSkillInvoke(self.name, 1)
       room:notifySkillInvoked(player, self.name, "control")
       local p = room:getPlayerById(data)
       if not p:isKongcheng() then
         room:askForDiscard(p, 1, 1, false, self.name, false)
       end
     else
-      room:broadcastSkillInvoke(self.name, 2)
+      player:broadcastSkillInvoke(self.name, 2)
       room:notifySkillInvoked(player, self.name, "defensive")
       table.insertIfNeed(data.nullifiedTargets, player.id)
       local suit = Fk:getCardById(self.cost_data[1]).suit
