@@ -1072,7 +1072,8 @@ local nya__luoshen_obtain = fk.CreateTriggerSkill{
   frequency = Skill.Compulsory,
   events = {fk.FinishJudge},
   can_trigger = function(self, event, target, player, data)
-    return target == player and data.reason == "nya__luoshen"
+    return target == player and not player.dead and data.reason == "nya__luoshen" and
+    player.room:getCardArea(data.card) == Card.Processing
   end,
   on_use = function(self, event, target, player, data)
     player.room:obtainCard(player.id, data.card)
@@ -1083,38 +1084,40 @@ local nya__qingguo = fk.CreateViewAsSkill{
   name = "nya__qingguo",
   anim_type = "defensive",
   pattern = "jink,peach",
-  card_filter = function(self, to_select, selected)
-    if #selected == 1 then return false end
-    local card = Fk:getCardById(to_select)
-    local c
-    if card.color == Card.Black then
-      c = Fk:cloneCard("jink")
-    elseif not Self:hasSkill("nya__play", true) and card.trueName == "jink" then
-      c = Fk:cloneCard("peach")
-    else
-      return false
+  interaction = function()
+    local names = {}
+    for _, name in ipairs({"jink","peach"}) do
+      local card = Fk:cloneCard(name)
+      if not (name == "peach" and Self:hasSkill("nya__play", true)) then
+        if (Fk.currentResponsePattern == nil and Self:canUse(card)) or
+          (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(card)) then
+          table.insertIfNeed(names, name)
+        end
+      end
     end
-    return (Fk.currentResponsePattern == nil and Self:canUse(c)) or
-      (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(c))
+    if #names == 0 then return end
+    return UI.ComboBox {choices = names}
+  end,
+  card_filter = function(self, to_select, selected)
+    if #selected == 1 or not self.interaction.data then return false end
+    if self.interaction.data == "jink"  then
+      return Fk:getCardById(to_select).color == Card.Black
+    elseif not Self:hasSkill("nya__play", true) then
+      return Fk:getCardById(to_select).name == "jink"
+    end
   end,
   view_as = function(self, cards)
     if #cards ~= 1 then return end
-    local card = Fk:getCardById(cards[1])
-    local c
-    if card.color == Card.Black then
-      c = Fk:cloneCard("jink")
-    elseif card.trueName == "jink" then
-      c = Fk:cloneCard("peach")
-    end
+    local c  = Fk:cloneCard(self.interaction.data)
     c.skillName = self.name
     c:addSubcard(cards[1])
     return c
   end,
   enabled_at_play = function(self, player)
-    return not player:hasSkill("nya__play", true)
+    return not player:hasSkill("nya__play", true) and not player:isNude()
   end,
   enabled_at_response = function(self, player, response)
-    return true
+    return not player:isNude()
   end,
 }
 zhenji:addSkill(nya__luoshen)
