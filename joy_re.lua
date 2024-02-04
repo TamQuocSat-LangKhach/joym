@@ -510,4 +510,151 @@ Fk:loadTranslationTable{
   ["@joy__tongli-turn"] = "同礼",
 }
 
+
+local joy_mouhuanggai = General(extension, "joy_mou__huanggai", "wu", 4)
+local joy_mou__kurou = fk.CreateActiveSkill{
+  name = "joy_mou__kurou",
+  anim_type = "negative",
+  card_num = 0,
+  card_filter = Util.FalseFunc,
+  target_num = 0,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    room:loseHp(player, 1, self.name)
+    if player.dead then return end
+    room:addPlayerMark(player, "@joy_mou__kurou")
+    room:broadcastProperty(player, "MaxCards")
+    room:changeMaxHp(player, 1)
+  end
+}
+local joy_mou__kurou_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy_mou__kurou_maxcards",
+  correct_func = function(self, player)
+    return player:getMark("@joy_mou__kurou")
+  end,
+}
+joy_mou__kurou:addRelatedSkill(joy_mou__kurou_maxcards)
+local joy_mou__kurou_delay = fk.CreateTriggerSkill{
+  name = "#joy_mou__kurou_delay",
+  frequency = Skill.Compulsory,
+  mute = true,
+  events = {fk.TurnStart, fk.CardUsing},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.TurnStart then
+      return player == target and player:getMark("@joy_mou__kurou") > 0
+    else
+      return player == target and player:hasSkill(joy_mou__kurou) and data.card.name == "peach"
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      local n = player:getMark("@joy_mou__kurou")
+      room:setPlayerMark(player, "@joy_mou__kurou", 0)
+      room:broadcastProperty(player, "MaxCards")
+      room:changeMaxHp(player, -n)
+    else
+      room:notifySkillInvoked(player, "joy_mou__kurou", "special")
+      player:setSkillUseHistory("joy_mou__kurou", 0, Player.HistoryPhase)
+    end
+  end,
+}
+joy_mou__kurou:addRelatedSkill(joy_mou__kurou_delay)
+joy_mouhuanggai:addSkill(joy_mou__kurou)
+local joy_mou__zhaxiang= fk.CreateTriggerSkill{
+  name = "joy_mou__zhaxiang",
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  events = {fk.HpLost, fk.PreCardUse, fk.TurnEnd},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      if event == fk.HpLost then
+        return true
+      elseif event == fk.TurnEnd then
+        return player:isWounded()
+      else
+        return data.card.trueName == "slash" and player:getMark("joy_mou__zhaxiang-turn") < ((player:getLostHp() + 1) // 2)
+      end
+    end
+  end,
+  on_trigger = function(self, event, target, player, data)
+    local num = (event == fk.HpLost) and data.num or 1
+    for i = 1, num do
+      self:doCost(event, target, player, data)
+      if player.dead then break end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.HpLost then
+      player:drawCards(3)
+    elseif event == fk.TurnEnd then
+      local x = (player:getLostHp() + 1) // 2
+      player:drawCards(x)
+    else
+      data.extraUse = true
+      data.disresponsiveList = table.map(player.room.alive_players, Util.IdMapper)
+    end
+  end,
+  
+  refresh_events = {fk.CardUsing, fk.HpChanged, fk.MaxHpChanged, fk.EventAcquireSkill, fk.TurnStart},
+  can_refresh = function(self, event, target, player, data)
+    if player:hasSkill(self, true) then
+      if event == fk.CardUsing then
+        return target == player and data.card.trueName == "slash"
+      elseif event == fk.EventAcquireSkill then
+        return target == player and data == self and player.room:getTag("RoundCount")
+      elseif event == fk.TurnStart then
+        return true
+      else
+        return target == player
+      end
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.CardUsing then
+      room:addPlayerMark(player, "joy_mou__zhaxiang-turn")
+    elseif event == fk.EventAcquireSkill then
+      room:setPlayerMark(player, "joy_mou__zhaxiang-turn", #room.logic:getEventsOfScope(GameEvent.UseCard, 1, function(e)
+        local use = e.data[1]
+        return use.from == player.id and use.card.trueName == "slash"
+      end, Player.HistoryTurn))
+    end
+    local x = (player:getLostHp() + 1) // 2
+    local used = player:getMark("joy_mou__zhaxiang-turn")
+    room:setPlayerMark(player, "@joy_mou__zhaxiang-turn", used.."/"..x)
+  end,
+}
+local joy_mou__zhaxiang_targetmod = fk.CreateTargetModSkill{
+  name = "#joy_mou__zhaxiang_targetmod",
+  bypass_times = function(self, player, skill, scope, card)
+    return card and card.trueName == "slash" and player:hasSkill("joy_mou__zhaxiang")
+    and player:getMark("joy_mou__zhaxiang-turn") < ((player:getLostHp() + 1) // 2)
+  end,
+  bypass_distances = function(self, player, skill, card)
+    return card and card.trueName == "slash" and player:hasSkill("joy_mou__zhaxiang")
+    and player:getMark("joy_mou__zhaxiang-turn") < ((player:getLostHp() + 1) // 2)
+  end,
+}
+joy_mou__zhaxiang:addRelatedSkill(joy_mou__zhaxiang_targetmod)
+joy_mouhuanggai:addSkill(joy_mou__zhaxiang)
+Fk:loadTranslationTable{
+  ["joy_mou"] = "欢乐谋",
+  ["joy_mou__huanggai"] = "谋黄盖",
+
+  ["joy_mou__kurou"] = "苦肉",
+  [":joy_mou__kurou"] = "出牌阶段限一次，你可以失去一点体力并令体力上限和手牌上限增加1点直到下回合开始。当你使用【桃】后，此技能视为未发动。",
+  ["@joy_mou__kurou"] = "苦肉",
+  ["#joy_mou__kurou_delay"] = "苦肉",
+
+  ["joy_mou__zhaxiang"] = "诈降",
+  [":joy_mou__zhaxiang"] = "锁定技，①每当你失去一点体力后，摸三张牌；②回合结束时，你摸X张牌；③每回合你使用的前X张【杀】无距离和次数限制且无法响应（X为你已损失的体力值的一半，向上取整）。",
+  ["@joy_mou__zhaxiang-turn"] = "诈降",
+}
+
+
 return extension

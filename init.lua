@@ -4,6 +4,8 @@ local joy_ex = require "packages/joym/joy_ex"
 local joy_yj = require "packages/joym/joy_yj"
 local joy_re = require "packages/joym/joy_re"
 
+Fk:loadTranslationTable{ ["joym"] = "欢乐杀" }
+
 return {
   joy_sp,
   joy_nya,

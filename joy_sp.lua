@@ -729,4 +729,136 @@ Fk:loadTranslationTable{
   "2.获得其手牌中所有【酒】，若其手牌中没有【酒】，则改为获得其一张牌。",
 }
 
+local joy__change = General(extension, "joy__change", "god", 1, 4, General.Female)
+local joy__daoyao = fk.CreateActiveSkill{
+  name = "joy__daoyao",
+  anim_type = "drawcard",
+  card_num = 1,
+  target_num = 0,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isKongcheng()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:currentRoom():getCardArea(to_select) ~= Player.Equip and
+      not Self:prohibitDiscard(Fk:getCardById(to_select))
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    room:throwCard(effect.cards, self.name, player, player)
+    if player.dead then return end
+    local ids = room:getCardsFromPileByRule("peach")
+    if #ids > 0 then
+      room:obtainCard(player, ids[1], false, fk.ReasonPrey)
+    end
+    if not player.dead then
+      player:drawCards(3 - #ids, self.name)
+    end
+  end,
+}
+joy__change:addSkill(joy__daoyao)
+local joy__benyue = fk.CreateTriggerSkill{
+  name = "joy__benyue",
+  frequency = Skill.Wake,
+  events = {fk.HpRecover, fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and player:usedSkillTimes(self.name, Player.HistoryGame) == 0 then
+      if event == fk.HpRecover then
+        return target == player
+      else
+        for _, move in ipairs(data) do
+          if move.to == player.id and move.toArea == Card.PlayerHand then
+            for _, info in ipairs(move.moveInfo) do
+              if info.fromArea == Card.DrawPile and Fk:getCardById(info.cardId).name == "peach" then
+                return true
+              end
+            end
+          end
+        end
+      end
+    end
+  end,
+  can_wake = function(self, event, target, player, data)
+    if event == fk.HpRecover then
+      local n = 0
+      player.room.logic:getEventsOfScope(GameEvent.ChangeHp, 1, function(e)
+        local damage = e.data[1]
+        if e.data[1] == player and e.data[3] == "recover" then
+          n = n + e.data[2]
+        end
+      end, Player.HistoryGame)
+      return n > 2
+    else
+      return #table.filter(player:getCardIds("h"), function (id)
+        return Fk:getCardById(id).name == "peach"
+      end) > 2
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if player.maxHp < 15 then
+      room:changeMaxHp(player, 15-player.maxHp)
+    end
+    room:handleAddLoseSkills(player, "joy__guanghan")
+  end,
+}
+joy__change:addSkill(joy__benyue)
+local joy__guanghan = fk.CreateTriggerSkill{
+  name = "joy__guanghan",
+  anim_type = "offensive",
+  events = {fk.Damaged},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) then
+      return data.extra_data and table.find(data.extra_data.joy__guanghan or {}, function (pid)
+        return pid ~= player.id and not player.room:getPlayerById(pid).dead
+      end)
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    for _, pid in ipairs(data.extra_data.joy__guanghan) do
+      local p = room:getPlayerById(pid)
+      if pid ~= player.id and not p.dead then
+        if p:isKongcheng() or #room:askForDiscard(p, 1, 1, false, self.name, true, ".", "#joy__guanghan-discard:::"..data.damage) == 0 then
+          room:loseHp(p, data.damage, self.name)
+        end
+      end
+    end
+  end,
+
+  refresh_events = {fk.BeforeHpChanged},
+  can_refresh = function(self, event, target, player, data)
+    return data.damageEvent and target == player
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local damage = data.damageEvent
+    damage.extra_data = damage.extra_data or {}
+    local list = {}
+    for _, p in ipairs(player.room:getAlivePlayers()) do
+      if target:getNextAlive() == p or p:getNextAlive() == target then
+        table.insertIfNeed(list, p.id)
+      end
+    end
+    damage.extra_data.joy__guanghan = list
+  end,
+}
+joy__change:addRelatedSkill(joy__guanghan)
+Fk:loadTranslationTable{
+  ["joy__change"] = "嫦娥",
+  ["#joy__change"] = "广寒仙子",
+  
+  ["joy__daoyao"] = "捣药",
+  [":joy__daoyao"] = "出牌阶段限一次，你可以弃置一张手牌，从牌堆获得一张【桃】并摸两张牌，若牌堆没有【桃】，改为摸三张牌。",
+
+  ["joy__benyue"] = "奔月",
+  [":joy__benyue"] = "觉醒技，当你摸到【桃】后若你有至少三张【桃】，或你累计回复3点体力后，你将体力上限增加至15，并获得技能〖广寒〗。",
+
+  ["joy__guanghan"] = "广寒",
+  [":joy__guanghan"] = "锁定技，当一名角色受到伤害后，与其相邻的其他角色需弃置一张手牌，否则失去等量体力。",
+  ["#joy__guanghan-discard"] = "广寒：你需弃置一张手牌，否则失去 %arg 点体力",
+
+  ["$joy__benyue1"] = "纵令奔月成仙去，且作行云入梦来",
+  ["$joy__benyue2"] = "一入月宫去，千秋闭峨眉",
+}
+
 return extension
