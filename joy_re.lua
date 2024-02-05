@@ -14,7 +14,7 @@ local joy__liangzhu = fk.CreateTriggerSkill{
   anim_type = "support",
   events = {fk.HpRecover},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and target.phase == Player.Play
+    return player:hasSkill(self) and target.phase == Player.Play
   end,
   on_cost = function(self, event, target, player, data)
     local all_choices = {"Cancel", "draw1", "joy__liangzhu_draw2::"..target.id, "joy__liangzhu_prey::"..target.id}
@@ -46,7 +46,7 @@ local joy__fanxiang = fk.CreateTriggerSkill{
   frequency = Skill.Wake,
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and
+    return target == player and player:hasSkill(self) and
       player.phase == Player.Start and
       player:usedSkillTimes(self.name, Player.HistoryGame) == 0
   end,
@@ -122,56 +122,48 @@ local joy__shenfu = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.phase == Player.Finish
+    return target == player and player:hasSkill(self) and player.phase == Player.Finish
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
     local n = 0
     if player:getHandcardNum() % 2 == 1 then
       while true do
-        local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), function(p)
-          return p.id end), 1, 1, "#shenfu-damage", self.name, true)
-        if #tos > 0 then
-          n = n + 1
-          local to = room:getPlayerById(tos[1])
-          room:damage{
-            from = player,
-            to = to,
-            damage = 1,
-            damageType = fk.ThunderDamage,
-            skillName = self.name,
-          }
-          if not to.dead then
-            break
-          end
-        else
+        local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#shenfu-damage", self.name, true)
+        if #tos == 0 then break end
+        n = n + 1
+        local to = room:getPlayerById(tos[1])
+        room:damage{
+          from = player,
+          to = to,
+          damage = 1,
+          damageType = fk.ThunderDamage,
+          skillName = self.name,
+        }
+        if not to.dead then
           break
         end
       end
     else
       while true do
         local tos = room:askForChoosePlayers(player, table.map(table.filter(room.alive_players, function(p)
-          return p:getMark("joy__shenfu-turn") == 0 end), function(p) return p.id end),
-          1, 1, "#shenfu-hand", self.name, true)
-        if #tos > 0 then
-          n = n + 1
-          local to = room:getPlayerById(tos[1])
-          room:setPlayerMark(to, "joy__shenfu-turn", 1)
-          if to:isKongcheng() then
+          return p:getMark("joy__shenfu-turn") == 0 end), Util.IdMapper), 1, 1, "#shenfu-hand", self.name, true)
+        if #tos == 0 then break end
+        n = n + 1
+        local to = room:getPlayerById(tos[1])
+        room:setPlayerMark(to, "joy__shenfu-turn", 1)
+        if to:isKongcheng() then
+          to:drawCards(1, self.name)
+        else
+          local choice = room:askForChoice(player, {"shenfu_draw", "shenfu_discard"}, self.name)
+          if choice == "shenfu_draw" then
             to:drawCards(1, self.name)
           else
-            local choice = room:askForChoice(player, {"shenfu_draw", "shenfu_discard"}, self.name)
-            if choice == "shenfu_draw" then
-              to:drawCards(1, self.name)
-            else
-              local card = room:askForCardsChosen(player, to, 1, 1, "h", self.name)
-              room:throwCard(card, self.name, to, player)
-            end
-            if to:getHandcardNum() ~= to.hp then
-              break
-            end
+            local card = room:askForCardsChosen(player, to, 1, 1, "h", self.name)
+            room:throwCard(card, self.name, to, player)
           end
-        else
+        end
+        if to:getHandcardNum() ~= to.hp then
           break
         end
       end
@@ -181,10 +173,43 @@ local joy__shenfu = fk.CreateTriggerSkill{
     end
   end,
 }
-local joy__qixian = fk.CreateMaxCardsSkill{
+local joy__qixian = fk.CreateTriggerSkill{
   name = "joy__qixian",
+  anim_type = "control",
+  events = {fk.EventPhaseEnd},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.phase == Player.Play and not player:isKongcheng()
+  end,
+  on_cost = function (self, event, target, player, data)
+    local card = player.room:askForCard(player, 1, 1, false, self.name, true, ".", "#joy__qixian-card")
+    if #card > 0 then
+      self.cost_data = card[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    player:addToPile(self.name, self.cost_data, false, self.name)
+  end,
+}
+local joy__qixian_delay = fk.CreateTriggerSkill{
+  name = "#joy__qixian_delay",
+  mute = true,
+  events = {fk.TurnEnd},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and #player:getPile("joy__qixian") > 0
+  end,
+  on_use = function(self, event, target, player, data)
+    local dummy = Fk:cloneCard("slash")
+    dummy:addSubcards(player:getPile("joy__qixian"))
+    player.room:obtainCard(player, dummy, false, fk.ReasonPrey)
+  end,
+}
+local joy__qixian_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__qixian_maxcards",
+  frequency = Skill.Compulsory,
   fixed_func = function (self, player)
-    if player:hasSkill(self.name) then
+    if player:hasSkill(joy__qixian) then
       return 7
     end
   end,
@@ -205,6 +230,8 @@ local joy__feifu = fk.CreateViewAsSkill{
   end,
 }
 godzhenji:addSkill(joy__shenfu)
+joy__qixian:addRelatedSkill(joy__qixian_maxcards)
+joy__qixian:addRelatedSkill(joy__qixian_delay)
 godzhenji:addSkill(joy__qixian)
 godzhenji:addSkill(joy__feifu)
 Fk:loadTranslationTable{
@@ -215,6 +242,8 @@ Fk:loadTranslationTable{
   "然后你摸X张牌（X为你本回合执行〖神赋〗流程的次数，最大为5）。",
   ["joy__qixian"] = "七弦",
   [":joy__qixian"] = "锁定技，你的手牌上限为7。出牌阶段结束时，你可以将一张手牌移出游戏直到回合结束。",
+  ["#joy__qixian_delay"] = "七弦",
+  ["#joy__qixian-card"] = "七弦：你可以将一张手牌移出游戏直到回合结束",
   ["joy__feifu"] = "飞凫",
   [":joy__feifu"] = "你可以将一张黑色牌当【闪】使用或打出。",
 }
@@ -225,7 +254,7 @@ local joy__youdi = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.phase == Player.Finish and not player:isKongcheng()
+    return target == player and player:hasSkill(self) and player.phase == Player.Finish and not player:isKongcheng()
   end,
   on_cost = function(self, event, target, player, data)
     local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), function(p)
@@ -267,7 +296,7 @@ local joy__kangge = fk.CreateTriggerSkill{
   events = {fk.TurnStart, fk.AfterCardsMove},
   mute = true,
   can_trigger = function(self, event, target, player, data)
-    if player:hasSkill(self.name) then
+    if player:hasSkill(self) then
       if event == fk.TurnStart then
         return target == player
       else
@@ -348,7 +377,7 @@ local joy__jielie = fk.CreateTriggerSkill{
   anim_type = "defensive",
   events = {fk.DamageInflicted},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name)
+    return target == player and player:hasSkill(self)
   end,
   on_cost = function(self, event, target, player, data)
     return player.room:askForSkillInvoke(player, self.name, nil, "#joy__jielie-invoke")
@@ -404,7 +433,7 @@ local joy__tongli = fk.CreateTriggerSkill{
   anim_type = "offensive",
   events = {fk.TargetSpecified},
   can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self.name) and player.phase == Player.Play and data.firstTarget and
+    if target == player and player:hasSkill(self) and player.phase == Player.Play and data.firstTarget and
       (data.card.type == Card.TypeBasic or data.card:isCommonTrick()) then
       if data.extra_data and data.extra_data.joy__tongli then return end
       local suits = {}
@@ -423,7 +452,7 @@ local joy__tongli = fk.CreateTriggerSkill{
 
   refresh_events = {fk.AfterCardUseDeclared, fk.CardUseFinished},
   can_refresh = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self.name) then
+    if target == player and player:hasSkill(self) then
       if event == fk.AfterCardUseDeclared then
         return player.phase == Player.Play and not table.contains(data.card.skillNames, self.name)
       else
@@ -474,7 +503,7 @@ local joy__shezang = fk.CreateTriggerSkill{
   anim_type = "drawcard",
   events = {fk.EnterDying},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and (target == player or player.phase ~= Player.NotActive) and
+    return player:hasSkill(self) and (target == player or player.phase ~= Player.NotActive) and
       player:usedSkillTimes(self.name, Player.HistoryTurn) == 0
   end,
   on_use = function(self, event, target, player, data)
