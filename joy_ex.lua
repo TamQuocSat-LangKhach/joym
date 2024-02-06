@@ -329,8 +329,7 @@ local joyex__fangzhu = fk.CreateTriggerSkill{
     return target == player and player:hasSkill(self.name)
   end,
   on_cost = function(self, event, target, player, data)
-    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), function(p)
-      return p.id end), 1, 1, "#joyex__fangzhu-choose", self.name, true)
+    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joyex__fangzhu-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
       return true
@@ -339,7 +338,9 @@ local joyex__fangzhu = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local to = player.room:getPlayerById(self.cost_data)
     to:drawCards(1, self.name)
-    to:turnOver()
+    if not to.dead then
+      to:turnOver()
+    end
   end,
 }
 caopi:addSkill(joyex__xingshang)

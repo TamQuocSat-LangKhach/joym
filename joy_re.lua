@@ -686,4 +686,172 @@ Fk:loadTranslationTable{
 }
 
 
+local godsimayi = General(extension, "joy__godsimayi", "god", 3)
+local joy__renjie = fk.CreateTriggerSkill{
+  name = "joy__renjie",
+  anim_type = "special",
+  frequency = Skill.Compulsory,
+  events = {fk.Damaged, fk.AfterCardsMove, fk.GameStart},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) then
+      if event == fk.Damaged then
+        return target == player
+      elseif event == fk.AfterCardsMove then
+        if player.phase == Player.Discard then
+          for _, move in ipairs(data) do
+            if move.from == player.id and move.moveReason == fk.ReasonDiscard then
+              for _, info in ipairs(move.moveInfo) do
+                if info.fromArea == Card.PlayerHand then
+                  return true
+                end
+              end
+            end
+          end
+        end
+      else
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local n = 0
+    if event == fk.Damaged then
+      room:addPlayerMark(player, "@godsimayi_bear", data.damage)
+    elseif event == fk.AfterCardsMove then
+      for _, move in ipairs(data) do
+        if move.from == player.id and move.moveReason == fk.ReasonDiscard then
+          for _, info in ipairs(move.moveInfo) do
+            if info.fromArea == Card.PlayerHand then
+              n = n + 1
+            end
+          end
+        end
+      end
+    else
+      n = 1
+    end
+    room:addPlayerMark(player, "@godsimayi_bear", n)
+  end,
+}
+local jilue = fk.CreateActiveSkill{
+  name = "joy__jilue",
+  mute = true,
+  card_num = 0,
+  target_num = 0,
+  card_filter = Util.FalseFunc,
+  prompt = "#joy__jilue-wansha",
+  can_use = function(self, player)
+    return player:getMark("@godsimayi_bear") > 0 and not player:hasSkill("joy__wansha", true)
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    room:removePlayerMark(player, "@godsimayi_bear", 1)
+    player:broadcastSkillInvoke("wansha")
+    room:notifySkillInvoked(player, "jilue", "offensive")
+    room:handleAddLoseSkills(player, "joy__wansha")
+    room.logic:getCurrentEvent():findParent(GameEvent.Turn):addCleaner(function()
+      room:handleAddLoseSkills(player, "-joy__wansha")
+    end)
+  end
+}
+local jilue_trigger = fk.CreateTriggerSkill{
+  name = "#joy__jilue_trigger",
+  mute = true,
+  main_skill = jilue,
+  events = {fk.AskForRetrial, fk.Damaged, fk.CardUsing, fk.AfterSkillEffect},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.AfterSkillEffect then
+      return data == jilue and target == player and player:usedSkillTimes("joy__jilue", Player.HistoryTurn) == 1 and not player.dead
+    elseif player:hasSkill(jilue) and player:getMark("@godsimayi_bear") > 0 then
+      if event == fk.AskForRetrial then
+        return not player:isNude()
+      elseif event == fk.Damaged then
+        return target == player
+      elseif event == fk.CardUsing then
+        return target == player and data.card:isCommonTrick()
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.AskForRetrial then
+      local card = room:askForResponse(player, "ex__guicai", ".|.|.|hand,equip", "#joy__jilue-guicai::" .. target.id..":"..data.reason, true)
+      if card ~= nil then
+        self.cost_data = card
+        return true
+      end
+    elseif event == fk.Damaged then
+      local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__jilue-fangzhu", "joyex__fangzhu", true)
+      if #to > 0 then
+        self.cost_data = to[1]
+        return true
+      end
+    elseif event == fk.CardUsing then
+      return room:askForSkillInvoke(player, "jizhi", nil, "#joy__jilue-jizhi")
+    else
+      return room:askForSkillInvoke(player, self.name, nil, "#joy__jilue-draw")
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:removePlayerMark(player, "@godsimayi_bear", 1)
+    room:notifySkillInvoked(player, "jilue", (event == fk.CardUsing or event == fk.AfterSkillEffect) and "drawcard" or "control")
+    if event == fk.AskForRetrial then
+      player:broadcastSkillInvoke("guicai")
+      room:retrial(self.cost_data, player, data, "uicai")
+    elseif event == fk.Damaged then
+      player:broadcastSkillInvoke("fangzhu")
+      local to = player.room:getPlayerById(self.cost_data)
+      to:drawCards(1, "joyex__fangzhu")
+      if not to.dead then
+        to:turnOver()
+      end
+    elseif event == fk.CardUsing then
+      player:broadcastSkillInvoke("jizhi")
+      player:drawCards(1, "jizhi")
+    else
+      player:drawCards(1, "joy__jilue")
+    end
+  end,
+}
+jilue:addRelatedSkill(jilue_trigger)
+
+local joy__wansha = fk.CreateProhibitSkill{
+  name = "joy__wansha",
+  frequency = Skill.Compulsory,
+  prohibit_use = function(self, player, card)
+    return card and card.name == "peach" and table.find(Fk:currentRoom().alive_players, function (p)
+      return p.phase ~= Player.NotActive and p ~= player and p:hasSkill(self)
+    end)
+  end,
+}
+godsimayi:addRelatedSkill(joy__wansha)
+
+godsimayi:addSkill(joy__renjie)
+godsimayi:addSkill("lianpo")
+godsimayi:addSkill(jilue)
+godsimayi:addRelatedSkill("ex__guicai")
+godsimayi:addRelatedSkill("joyex__fangzhu")
+godsimayi:addRelatedSkill("jizhi")
+godsimayi:addRelatedSkill("joy__wansha")
+Fk:loadTranslationTable{
+  ["joy__godsimayi"] = "神司马懿",
+  ["#joy__godsimayi"] = "晋国之祖",
+  ["joy__renjie"] = "忍戒",
+  [":joy__renjie"] = "锁定技，游戏开始时，你获得1枚“忍”标记；当你受到伤害后/于弃牌阶段弃置手牌后，你获得X枚“忍”（X为伤害值/你弃置的手牌数）。",
+  ["joy__jilue"] = "极略",
+  [":joy__jilue"] = "你可以弃置1枚“忍”，发动下列一项技能：〖鬼才〗、〖放逐〗、〖集智〗、〖完杀〗；你每回合首次发动〖极略〗时可摸一张牌。",
+  
+  ["#joy__jilue-jizhi"] = "极略：可弃1枚“忍”标记，发动〖集智〗：摸一张牌",
+  ["#joy__jilue-wansha"] = "极略：你可以弃1枚“忍”标记，获得〖完杀〗直到回合结束",
+  ["#joy__jilue-fangzhu"] = "极略：可弃1枚“忍”标记，发动〖放逐〗：令一名其他角色翻面并摸一张牌",
+  ["#joy__jilue-guicai"] = "极略：可弃1枚“忍”标记，发动〖鬼才〗：修改 %dest 的“%arg”判定",
+  ["#joy__jilue-draw"] = "极略：你可以摸一张牌",
+  ["#joy__jilue_trigger"] = "极略",
+
+  ["joy__wansha"] = "完杀",
+  [":joy__wansha"] = "锁定技，其他角色无法于你的回合内使用【桃】",
+}
+
 return extension
