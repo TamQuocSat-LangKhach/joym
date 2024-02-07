@@ -513,4 +513,82 @@ Fk:loadTranslationTable{
   ["~joyex__simayi"] = "我的气数，就到这里了么？",
 }
 
+local guanyu = General:new(extension, "joyex__guanyu", "shu", 4)
+local wusheng = fk.CreateViewAsSkill{
+  name = "joyex__wusheng",
+  anim_type = "offensive",
+  pattern = "slash",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).color == Card.Red
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return nil end
+    local c = Fk:cloneCard("slash")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+}
+local wusheng_trigger = fk.CreateTriggerSkill{
+  name = "#joyex__wusheng_trigger",
+  main_skill = wusheng,
+  mute = true,
+  events = {fk.TurnStart, fk.AfterCardUseDeclared},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      return (event == fk.TurnStart) or (data.card.trueName == "slash" and data.card.color == Card.Red)
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      room:notifySkillInvoked(player, "joyex__wusheng", "drawcard")
+      local ids = room:getCardsFromPileByRule("slash|.|heart,diamond", 1, "allPiles")
+      if #ids > 0 then
+        room:obtainCard(player, ids[1], false, fk.ReasonPrey)
+      end
+    else
+      room:notifySkillInvoked(player, "joyex__wusheng", "offensive")
+      data.additionalDamage = (data.additionalDamage or 0) + 1
+    end
+  end,
+}
+local joy__tuodao = fk.CreateTriggerSkill{
+  name = "joy__tuodao",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {fk.CardUseFinished, fk.CardRespondFinished},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.card.name == "jink"
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:addPlayerMark(player, "@joy__tuodao")
+  end,
+
+  refresh_events = {fk.CardUsing},
+  can_refresh = function (self, event, target, player, data)
+    return player == target and data.card.trueName == "slash" and player:getMark("@joy__tuodao") > 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    data.additionalDamage = (data.additionalDamage or 0) + player:getMark("@joy__tuodao")
+    player.room:setPlayerMark(player, "@joy__tuodao", 0)
+  end,
+}
+wusheng:addRelatedSkill(wusheng_trigger)
+guanyu:addSkill(wusheng)
+guanyu:addSkill(joy__tuodao)
+guanyu:addSkill("guanjue")
+Fk:loadTranslationTable{
+  ["joyex__guanyu"] = "界关羽",
+  ["#joyex__guanyu"] = "美髯公",
+  ["joyex__wusheng"] = "武圣",
+  [":joyex__wusheng"] = "回合开始时，你获得一张红色牌；你可以将一张红色牌当做【杀】使用或打出；你使用的红色【杀】伤害+1。",
+  ["#joyex__wusheng_trigger"] = "武圣",
+  ["joy__tuodao"] = "拖刀",
+  [":joy__tuodao"] = "锁定技，每当你使用或打出一张【闪】后，令你下一张使用的【杀】伤害+1。",
+  ["@joy__tuodao"] = "拖刀",
+}
+
+
 return extension
