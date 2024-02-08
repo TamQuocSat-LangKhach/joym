@@ -5,6 +5,8 @@ Fk:loadTranslationTable{
   ["joy_re"] = "欢乐-RE",
 }
 
+local U = require "packages/utility/utility"
+
 --在原技能组上修改的武将
 --群马超 魏庞德 张宝 何太后 孙鲁育 SP孙尚香 孙皓 麹义 神甄姬 张梁 群太史慈 吴庞统 周鲂 张昌蒲 唐姬 杜夫人 张嫙
 
@@ -853,6 +855,128 @@ Fk:loadTranslationTable{
   ["joy__wansha"] = "完杀",
   [":joy__wansha"] = "锁定技，其他角色无法于你的回合内使用【桃】",
 }
+
+local joy__godliubei = General(extension, "joy__godliubei", "god", 6)
+local joy__longnu = fk.CreateTriggerSkill{
+  name = "joy__longnu",
+  events = {fk.EventPhaseStart},
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.phase == Player.Play
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local choice = room:askForChoice(player, {"joy__longnu_red", "joy__longnu_black"}, self.name)
+    local mark = U.getMark(player, "@joy__longnu-turn")
+    local color = string.sub(choice, 13, -1)
+    table.insertIfNeed(mark, color)
+    room:setPlayerMark(player, "@joy__longnu-turn", mark)
+    for _, id in ipairs(player:getCardIds("h")) do
+      Fk:filterCard(id, player)
+    end
+    if color == "red" then
+      room:loseHp(player, 1, self.name)
+      if player.dead then return end
+      player:drawCards(2, self.name)
+    else
+      room:changeMaxHp(player, -1)
+    end
+  end,
+}
+local joy__longnu_filter = fk.CreateFilterSkill{
+  name = "#joy__longnu_filter",
+  card_filter = function(self, card, player)
+    if player:hasSkill("joy__longnu") and table.contains(player.player_cards[Player.Hand], card.id) then
+      local mark = U.getMark(player, "@joy__longnu-turn")
+      return table.contains(mark, card:getColorString())
+    end
+  end,
+  view_as = function(self, card, player)
+    local c = Fk:cloneCard(card.color == Card.Red and "fire__slash" or "thunder__slash", card.suit, card.number)
+    c.skillName = "joy__longnu"
+    return c
+  end,
+}
+local joy__longnu_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__longnu_targetmod",
+  bypass_distances =  function(self, player, skill, card, to)
+    return card and card.name == "fire__slash" and table.contains(card.skillNames, "joy__longnu")
+  end,
+  bypass_times = function(self, player, skill, scope, card, to)
+    return card and card.name == "thunder__slash" and table.contains(card.skillNames, "joy__longnu")
+  end,
+}
+joy__longnu:addRelatedSkill(joy__longnu_filter)
+joy__longnu:addRelatedSkill(joy__longnu_targetmod)
+joy__godliubei:addSkill(joy__longnu)
+local joy__jieying = fk.CreateTriggerSkill{
+  name = "joy__jieying",
+  events = {fk.BeforeChainStateChange, fk.EventPhaseStart, fk.GameStart, fk.DamageInflicted},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.BeforeChainStateChange then
+      return target == player and player.chained
+    elseif event == fk.EventPhaseStart then
+      return target == player and player.phase == Player.Finish and table.find(player.room.alive_players, function(p)
+        return p ~= player and not p.chained
+      end)
+    elseif event == fk.DamageInflicted then
+      return target == player
+    else
+      return not player.chained
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    if event == fk.GameStart then
+      player:setChainState(true)
+    elseif event == fk.BeforeChainStateChange then
+      return true
+    elseif event == fk.DamageInflicted then
+      player:drawCards(1, self.name)
+    else
+      local room = player.room
+      local targets = table.filter(room.alive_players, function(p)
+        return p ~= player and not p.chained
+      end)
+      if #targets == 0 then return false end
+      local tos = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__jieying-target", self.name, true)
+      if #tos > 0 then
+        room:getPlayerById(tos[1]):setChainState(true)
+      end
+    end
+  end,
+}
+local joy__jieying_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__jieying_maxcards",
+  correct_func = function(self, player)
+    if player.chained then
+      local num = #table.filter(Fk:currentRoom().alive_players, function(p)
+        return p:hasSkill(joy__jieying)
+      end)
+      return 2 * num
+    end
+  end,
+}
+joy__jieying:addRelatedSkill(joy__jieying_maxcards)
+joy__godliubei:addSkill(joy__jieying)
+Fk:loadTranslationTable{
+  ["joy__godliubei"] = "神刘备",
+  ["#joy__godliubei"] = "誓守桃园义",
+
+  ["joy__longnu"] = "龙怒",
+  [":joy__longnu"] = "锁定技，出牌阶段开始时，你须选一项：1.失去1点体力并摸两张牌，你的红色手牌于本回合均视为无距离限制的火【杀】；2.扣减1点体力上限，你的黑色手牌于本回合均视为无次数限制的雷【杀】。",
+  ["joy__jieying"] = "结营",
+  [":joy__jieying"] = "锁定技，你始终处于横置状态；每当你受到伤害时，摸一张牌；处于连环状态的角色手牌上限+2；结束阶段，你可以横置一名其他角色。",
+
+  ["#joy__longnu_filter"] = "龙怒",
+  ["joy__longnu_red"] = "失去体力并摸牌，红色手牌视为火杀",
+  ["joy__longnu_black"] = "减体力上限，黑色手牌视为雷杀",
+  ["@joy__longnu-turn"] = "龙怒",
+  ["#joy__jieying-target"] = "结营：你可以横置一名其他角色",
+}
+
 
 local joy__zhugedan = General(extension, "joy__zhugedan", "wei", 4)
 local joy__gongao = fk.CreateTriggerSkill{

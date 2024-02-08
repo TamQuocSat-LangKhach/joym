@@ -590,5 +590,84 @@ Fk:loadTranslationTable{
   ["@joy__tuodao"] = "拖刀",
 }
 
+local joyex__guojia = General(extension, "joyex__guojia", "wei", 3)
+
+local checkShenglunMark = function (player)
+  local mark = player.dead and 0 or ("胜"..player:getMark("joy__shenglun_win").." 败"..player:getMark("joy__shenglun_lose"))
+  player.room:setPlayerMark(player, "@joy__shenglun", mark)
+end
+
+local joy__shenglun = fk.CreateActiveSkill{
+  name = "joy__shenglun",
+  anim_type = "control",
+  card_num = 0,
+  min_target_num = 1,
+  max_target_num = 2,
+  card_filter = Util.FalseFunc,
+  target_filter = function(self, to_select, selected, selected_cards)
+    return #selected < 2 and Self.id ~= to_select
+  end,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    room:sortPlayersByAction(effect.tos)
+    for _, pid in ipairs(effect.tos) do
+      local to = room:getPlayerById(pid)
+      local list = {
+        player.hp - to.hp,
+        player:getHandcardNum() - to:getHandcardNum(),
+        #player:getEquipments(Card.SubtypeWeapon)-#to:getEquipments(Card.SubtypeWeapon),
+        #player:getEquipments(Card.SubtypeArmor)-#to:getEquipments(Card.SubtypeArmor),
+        (#player:getEquipments(Card.SubtypeDefensiveRide)+#player:getEquipments(Card.SubtypeOffensiveRide)) -
+        (#to:getEquipments(Card.SubtypeDefensiveRide)+#to:getEquipments(Card.SubtypeOffensiveRide)),
+      }
+      for _, n in ipairs(list) do
+        if n > 0 then
+          room:addPlayerMark(player, "joy__shenglun_win")
+        else
+          room:addPlayerMark(player, "joy__shenglun_lose")
+        end
+      end
+    end
+    checkShenglunMark(player)
+    local yiji = Fk.skills["ex__yiji"]
+    if player:getMark("joy__shenglun_win") > 9 then
+      if player:isWounded() then
+        room:recover { num = 1, skillName = self.name, who = player, recoverBy = player}
+        if player.dead then return end
+      end
+      room:useSkill(player, yiji, function()
+        return yiji:use(fk.Damaged, player, player, {to = player, num = 1})
+      end)
+      room:setPlayerMark(player, "joy__shenglun_win", 0)
+      checkShenglunMark(player)
+    end
+    if player.dead then return end
+    if player:getMark("joy__shenglun_lose") > 9 then
+      local tos = room:askForChoosePlayers(player, table.map(room.alive_players, Util.IdMapper), 1, 1, "#joy__shenglun-damage", self.name, false)
+      room:damage { from = player, to = room:getPlayerById(tos[1]), damage = 1, skillName = self.name }
+      if player.dead then return end
+      room:useSkill(player, yiji, function()
+        return yiji:use(fk.Damaged, player, player, {to = player, num = 1})
+      end)
+      room:setPlayerMark(player, "joy__shenglun_lose", 0)
+      checkShenglunMark(player)
+    end
+  end,
+}
+joyex__guojia:addSkill(joy__shenglun)
+joyex__guojia:addSkill("tiandu")
+joyex__guojia:addSkill("ex__yiji")
+
+Fk:loadTranslationTable{
+  ["joyex__guojia"] = "界郭嘉",
+  ["joy__shenglun"] = "胜论",
+  [":joy__shenglun"] = "出牌阶段限一次，你可以选择至多两名其他角色，你依次与这些角色比较体力、手牌、武器、防具、坐骑的数量（数量大于其为胜，否则为负），若胜或败累计达到10次，胜：你回复1点体力，败：你对一名角色造成1点伤害。然后发动一次“遗计”并重置对应的胜败次数。",
+  ["@joy__shenglun"] = "胜论",
+  ["#joy__shenglun-damage"] = "胜论：对一名角色造成1点伤害",
+}
+
 
 return extension
