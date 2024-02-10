@@ -22,7 +22,7 @@ local joyex__jizhi = fk.CreateTriggerSkill{
   anim_type = "drawcard",
   events = {fk.CardUsing},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and data.card.type == Card.TypeTrick
+    return target == player and player:hasSkill(self) and data.card.type == Card.TypeTrick
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
@@ -66,7 +66,7 @@ local joyex__qicai = fk.CreateTriggerSkill{
   frequency = Skill.Compulsory,
   events = {fk.BeforeCardsMove},
   can_trigger = function(self, event, target, player, data)
-    if player:hasSkill(self.name) and (player:getEquipment(Card.SubtypeWeapon) or player:getEquipment(Card.SubtypeArmor)) then
+    if player:hasSkill(self) and (player:getEquipment(Card.SubtypeWeapon) or player:getEquipment(Card.SubtypeArmor)) then
       for _, move in ipairs(data) do
         if move.from == player.id and move.moveReason == fk.ReasonDiscard and (not move.proposer or move.proposer ~= player.id) then
           for _, info in ipairs(move.moveInfo) do
@@ -166,7 +166,7 @@ local joyex__biyue = fk.CreateTriggerSkill{
   anim_type = "drawcard",
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.phase == Player.Finish
+    return target == player and player:hasSkill(self) and player.phase == Player.Finish
   end,
   on_cost = function(self, event, target, player, data)
     return true
@@ -192,7 +192,7 @@ local joyex__tianxiang = fk.CreateTriggerSkill{
   anim_type = "defensive",
   events = {fk.DamageInflicted},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and target == player
+    return player:hasSkill(self) and target == player
   end,
   on_cost = function(self, event, target, player, data)
     local tar, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
@@ -224,7 +224,7 @@ local joyex__hongyan = fk.CreateFilterSkill{
   name = "joyex__hongyan",
   frequency = Skill.Compulsory,
   card_filter = function(self, to_select, player)
-    return to_select.suit == Card.Spade and player:hasSkill(self.name)
+    return to_select.suit == Card.Spade and player:hasSkill(self)
   end,
   view_as = function(self, to_select)
     return Fk:cloneCard(to_select.name, Card.Heart, to_select.number)
@@ -275,7 +275,7 @@ local joyex__duanliang_targetmod = fk.CreateTargetModSkill{
   name = "#joyex__duanliang_targetmod",
   main_skill = joyex__duanliang,
   bypass_distances =  function(self, player, skill, card, to)
-    return player:hasSkill(self.name) and skill.name == "supply_shortage_skill" and to:getHandcardNum() >= player:getHandcardNum()
+    return player:hasSkill(self) and skill.name == "supply_shortage_skill" and to:getHandcardNum() >= player:getHandcardNum()
   end,
 }
 local joyex__jiezi = fk.CreateTriggerSkill{
@@ -284,7 +284,7 @@ local joyex__jiezi = fk.CreateTriggerSkill{
   frequency = Skill.Compulsory,
   events = {fk.EventPhaseSkipping},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and target ~= player and target.skipped_phases[Player.Draw] and  --FIXME: 此时机无data，需补充
+    return player:hasSkill(self) and target ~= player and target.skipped_phases[Player.Draw] and  --FIXME: 此时机无data，需补充
       player:usedSkillTimes(self.name, Player.HistoryRound) < 2
   end,
   on_use = function(self, event, target, player, data)
@@ -303,57 +303,6 @@ Fk:loadTranslationTable{
   ["#joyex__duanliang"] = "断粮：你可以将一张黑色基本牌或装备牌当【兵粮寸断】使用",
 }
 
-local caopi = General(extension, "joyex__caopi", "wei", 3)
-local joyex__xingshang = fk.CreateTriggerSkill{
-  name = "joyex__xingshang",
-  anim_type = "drawcard",
-  events = {fk.Death},
-  can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and not target:isNude()
-  end,
-  on_use = function(self, event, target, player, data)
-    local room = player.room
-    local dummy = Fk:cloneCard("dilu")
-    dummy:addSubcards(target:getCardIds("he"))
-    room:obtainCard(player.id, dummy, false, fk.ReasonPrey)
-    if player.dead then
-      player:drawCards(1, self.name)
-    end
-  end,
-}
-local joyex__fangzhu = fk.CreateTriggerSkill{
-  name = "joyex__fangzhu",
-  anim_type = "masochism",
-  events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name)
-  end,
-  on_cost = function(self, event, target, player, data)
-    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joyex__fangzhu-choose", self.name, true)
-    if #to > 0 then
-      self.cost_data = to[1]
-      return true
-    end
-  end,
-  on_use = function(self, event, target, player, data)
-    local to = player.room:getPlayerById(self.cost_data)
-    to:drawCards(1, self.name)
-    if not to.dead then
-      to:turnOver()
-    end
-  end,
-}
-caopi:addSkill(joyex__xingshang)
-caopi:addSkill(joyex__fangzhu)
-caopi:addSkill("songwei")
-Fk:loadTranslationTable{
-  ["joyex__caopi"] = "界曹丕",
-  ["joyex__xingshang"] = "行殇",
-  [":joyex__xingshang"] = "当其他角色死亡时，你可以获得其所有牌并摸一张牌。",
-  ["joyex__fangzhu"] = "放逐",
-  [":joyex__fangzhu"] = "当你受到伤害后，你可以令一名其他角色翻面，然后其摸一张牌。",
-  ["#joyex__fangzhu-choose"] = "放逐：你可以令一名其他角色翻面，然后其摸一张牌",
-}
 
 local wangji = General(extension, "joyex__wangji", "wei", 3)
 local joyex__qizhi = fk.CreateTriggerSkill{
@@ -361,7 +310,7 @@ local joyex__qizhi = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.TargetSpecified},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.phase ~= Player.NotActive and
+    return target == player and player:hasSkill(self) and player.phase ~= Player.NotActive and
       data.firstTarget and data.card.type ~= Card.TypeEquip
   end,
   on_cost = function(self, event, target, player, data)
@@ -394,7 +343,7 @@ local joyex__jinqu = fk.CreateTriggerSkill{
   anim_type = "drawcard",
   events = {fk.EventPhaseChanging},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and data.to == Player.Discard
+    return target == player and player:hasSkill(self) and data.to == Player.Discard
   end,
   on_use = function(self, event, target, player, data)
     player:drawCards(2, self.name)

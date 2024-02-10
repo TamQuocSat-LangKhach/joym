@@ -7,6 +7,63 @@ Fk:loadTranslationTable{
 
 local U = require "packages/utility/utility"
 
+local caopi = General(extension, "joy__caopi", "wei", 3)
+local xingshang = fk.CreateTriggerSkill{
+  name = "joy__xingshang",
+  anim_type = "drawcard",
+  events = {fk.Death},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and not target:isNude()
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke("fangzhu")
+    local cards = target:getCardIds{Player.Hand, Player.Equip}
+    if #cards > 0 then
+      local dummy = Fk:cloneCard'slash'
+      dummy:addSubcards(cards)
+      room:obtainCard(player.id, dummy, false, fk.ReasonPrey)
+    end
+    if not player.dead then
+      player:drawCards(1, self.name)
+    end
+  end,
+}
+local fangzhu = fk.CreateTriggerSkill{
+  name = "joy__fangzhu",
+  anim_type = "masochism",
+  events = {fk.Damaged},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self)
+  end,
+  on_cost = function(self, event, target, player, data)
+    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__fangzhu-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    player:broadcastSkillInvoke("fangzhu")
+    local to = player.room:getPlayerById(self.cost_data)
+    to:turnOver()
+    if not to.dead then
+      to:drawCards(1, self.name)
+    end
+  end,
+}
+caopi:addSkill(xingshang)
+caopi:addSkill(fangzhu)
+caopi:addSkill("songwei")
+Fk:loadTranslationTable{
+  ["joy__caopi"] = "曹丕",
+  ["joy__xingshang"] = "行殇",
+  [":joy__xingshang"] = "当其他角色死亡时，你可以获得其所有牌并摸一张牌。",
+  ["joy__fangzhu"] = "放逐",
+  [":joy__fangzhu"] = "当你受到伤害后，你可以令一名其他角色翻面，然后该角色摸一张牌。",
+  ["#joy__fangzhu-choose"] = "放逐：你可以令一名其他角色翻面，然后其摸一张牌",
+}
+
 local yanyan = General(extension, "joy__yanyan", "shu", 4)
 local joy__juzhan = fk.CreateTriggerSkill{
   name = "joy__juzhan",

@@ -6,6 +6,26 @@ Fk:loadTranslationTable{
 }
 
 --曹植 于禁 荀攸 曹彰 步练师 刘封 伏皇后 周仓 曹休 孙登 徐氏 曹节
+local yujin = General(extension, "joy__yujin", "wei", 4)
+local yizhong = fk.CreateTriggerSkill{
+  name = "joy__yizhong",
+  anim_type = "defensive",
+  frequency = Skill.Compulsory,
+  events = {fk.PreCardEffect},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and data.card.trueName == "slash" and player.id == data.to and
+      data.card.suit == Card.Club and #player.player_cards[Player.Equip] == 0
+  end,
+  on_use = Util.TrueFunc,
+}
+yujin:addSkill(yizhong)
+yujin:addSkill("ty_ex__zhenjun")
+Fk:loadTranslationTable{
+  ["joy__yujin"] = "于禁",
+  ["joy__yizhong"] = "毅重",
+  [":joy__yizhong"] = "锁定技，若你的装备区没有牌，梅花【杀】对你无效。",
+}
+
 local xunyou = General(extension, "joy__xunyou", "wei", 3)
 local joy__qice = fk.CreateViewAsSkill{
   name = "joy__qice",
