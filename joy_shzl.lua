@@ -7,6 +7,7 @@ Fk:loadTranslationTable{
 
 local U = require "packages/utility/utility"
 
+
 local caopi = General(extension, "joy__caopi", "wei", 3)
 local xingshang = fk.CreateTriggerSkill{
   name = "joy__xingshang",

@@ -572,12 +572,12 @@ local joy_mou__kurou_delay = fk.CreateTriggerSkill{
   name = "#joy_mou__kurou_delay",
   frequency = Skill.Compulsory,
   mute = true,
-  events = {fk.TurnStart, fk.CardUsing},
+  events = {fk.TurnStart, fk.HpRecover},
   can_trigger = function(self, event, target, player, data)
     if event == fk.TurnStart then
       return player == target and player:getMark("@joy_mou__kurou") > 0
     else
-      return player == target and player:hasSkill(joy_mou__kurou) and data.card.name == "peach"
+      return player == target and player:hasSkill(joy_mou__kurou)
     end
   end,
   on_use = function(self, event, target, player, data)
@@ -595,6 +595,7 @@ local joy_mou__kurou_delay = fk.CreateTriggerSkill{
 }
 joy_mou__kurou:addRelatedSkill(joy_mou__kurou_delay)
 joy_mouhuanggai:addSkill(joy_mou__kurou)
+
 local joy_mou__zhaxiang= fk.CreateTriggerSkill{
   name = "joy_mou__zhaxiang",
   anim_type = "drawcard",
@@ -678,7 +679,7 @@ Fk:loadTranslationTable{
   ["joy_mou__huanggai"] = "谋黄盖",
 
   ["joy_mou__kurou"] = "苦肉",
-  [":joy_mou__kurou"] = "出牌阶段限一次，你可以失去一点体力并令体力上限和手牌上限增加1点直到下回合开始。当你使用【桃】后，此技能视为未发动。",
+  [":joy_mou__kurou"] = "出牌阶段限一次，你可以失去一点体力并令体力上限和手牌上限增加1点直到下回合开始。当你回复体力后，此技能视为未发动。",
   ["@joy_mou__kurou"] = "苦肉",
   ["#joy_mou__kurou_delay"] = "苦肉",
 
@@ -765,6 +766,53 @@ Fk:loadTranslationTable{
   ["joy__benghuai"] = "崩坏",
   [":joy__benghuai"] = "锁定技，结束阶段，若你不是体力值最低的角色，则你失去1点体力或减少1点体力上限，并摸一张牌。",
 }
+
+
+local joy__caoang = General(extension, "joy__caoang", "wei", 4)
+local joy__kangkai = fk.CreateTriggerSkill{
+  name = "joy__kangkai",
+  anim_type = "support",
+  events = {fk.TargetConfirmed},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and data.card.trueName == "slash" and
+    (player == target or player:distanceTo(target) == 1)
+  end,
+  on_cost = function (self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#joy__kangkai-invoke")
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:drawCards(1, self.name)
+    if player == target or player:isNude() or target.dead or player:getMark("joy__kangkai-turn") == 2 then return end
+    local cards = room:askForCard(player, 1, 1, true, self.name, true, ".", "#joy__kangkai-give::"..target.id)
+    if #cards > 0 then
+      room:addPlayerMark(player, "joy__kangkai-turn")
+      local card = Fk:getCardById(cards[1])
+      room:moveCardTo(card, Card.PlayerHand, target, fk.ReasonGive, self.name, nil, true, player.id)
+      if card.type == Card.TypeEquip and not target.dead and not target:isProhibited(target, card) and not target:prohibitUse(card) and
+        table.contains(target:getCardIds("h"), card.id) and
+        room:askForSkillInvoke(target, self.name, data, "#kangkai-use:::"..card:toLogString()) then
+        room:useCard({
+          from = target.id,
+          tos = {{target.id}},
+          card = card,
+        })
+      end
+    end
+  end,
+}
+joy__caoang:addSkill(joy__kangkai)
+Fk:loadTranslationTable{
+  ["joy__caoang"] = "曹昂",
+  ["#joy__caoang"] = "取义成仁",
+  ["joy__kangkai"] = "慷忾",
+  [":joy__kangkai"] = "当一名角色成为【杀】的目标后，若你与其的距离不大于1，你可以摸一张牌，然后可以交给该角色一张牌再令其展示之（每回合限两次），若此牌为装备牌，其可以使用之。",
+  ["#joy__kangkai-invoke"] = "慷忾：你可以摸一张牌",
+  ["#joy__kangkai-give"] = "慷忾：可以选择一张牌交给 %dest",
+}
+
+
+
 
 
 return extension
