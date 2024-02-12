@@ -65,6 +65,126 @@ Fk:loadTranslationTable{
   ["#joy__fangzhu-choose"] = "放逐：你可以令一名其他角色翻面，然后其摸一张牌",
 }
 
+-- thunder
+
+local lukang = General(extension, "joy__lukang", "wu", 4)
+lukang:addSkill("qianjie")
+local jueyan = fk.CreateActiveSkill{
+  name = "joy__jueyan",
+  can_use = function (self, player)
+    if player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 then
+      local slots = player:getAvailableEquipSlots()
+      return table.contains(slots, Player.WeaponSlot) or table.contains(slots, Player.ArmorSlot) or
+      (table.contains(slots, Player.OffensiveRideSlot) and table.contains(slots, Player.DefensiveRideSlot))
+    end
+  end,
+  card_filter = Util.FalseFunc,
+  card_num = 0,
+  target_num = 0,
+  interaction = function()
+    local slots = Self:getAvailableEquipSlots()
+    local choices = {}
+    if table.contains(slots, Player.WeaponSlot) then table.insert(choices, "WeaponSlot") end
+    if table.contains(slots, Player.ArmorSlot) then table.insert(choices, "ArmorSlot") end
+    if table.contains(slots, Player.OffensiveRideSlot) and table.contains(slots, Player.DefensiveRideSlot) then
+      table.insert(choices, "RideSlot")
+    end
+    if #slots == 0 then return end
+    return UI.ComboBox {choices = choices}
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local choice = self.interaction.data
+    if choice == "RideSlot" then
+      choice = {Player.OffensiveRideSlot, Player.DefensiveRideSlot}
+    end
+    room:abortPlayerArea(player, choice)
+    if player.dead then return end
+    if choice == 'WeaponSlot' then
+      room:addPlayerMark(player, MarkEnum.SlashResidue.."-turn", 3)
+    elseif choice == 'ArmorSlot' then
+      room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, 3)
+      player:drawCards(3, self.name)
+    else
+      room:addPlayerMark(player, "jueyan_distance-turn")
+      if player:isWounded() then
+        room:recover { num = 1, skillName = self.name, who = player, recoverBy = player}
+      end
+      if not player:hasSkill("ex__jizhi",true) then
+        room:handleAddLoseSkills(player, "ex__jizhi", nil, false)
+        room.logic:getCurrentEvent():findParent(GameEvent.Turn):addCleaner(function()
+          room:handleAddLoseSkills(player, "-ex__jizhi", nil, false)
+        end)
+      end
+    end
+  end,
+}
+local jueyan_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__jueyan_targetmod",
+  bypass_distances = function(self, player, skill, card, to)
+    return player:getMark("jueyan_distance-turn") > 0
+  end,
+}
+jueyan:addRelatedSkill(jueyan_targetmod)
+lukang:addSkill(jueyan)
+lukang:addRelatedSkill("ex__jizhi")
+local huairou = fk.CreateActiveSkill{
+  name = "joy__huairou",
+  anim_type = "drawcard",
+  can_use = function(self, player)
+    return not player:isNude()
+  end,
+  card_num = 1,
+  card_filter = function(self, to_select, selected)
+    return #selected < 1 and Fk:getCardById(to_select).type == Card.TypeEquip
+    and table.contains(Self.sealedSlots, Util.convertSubtypeAndEquipSlot(Fk:getCardById(to_select).sub_type))
+  end,
+  target_num = 0,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    room:moveCards({
+      ids = effect.cards,
+      from = player.id,
+      toArea = Card.DiscardPile,
+      skillName = self.name,
+      moveReason = fk.ReasonPutIntoDiscardPile,
+      proposer = player.id
+    })
+    if player.dead then return end
+    local allCardMapper = {}
+    local allCardNames = {}
+    local mark = U.getMark(player, "joy__huairou-turn")
+    for _, id in ipairs(Fk:getAllCardIds()) do
+      local card = Fk:getCardById(id)
+      if not table.contains(mark, card.name) and card.type ~= Card.TypeEquip and (room:getCardArea(id) == Card.DrawPile or room:getCardArea(id) == Card.DiscardPile) then
+        if allCardMapper[card.name] == nil then
+          allCardMapper[card.name] = {}
+          table.insert(allCardNames, card.name)
+        end
+        table.insert(allCardMapper[card.name], id)
+      end
+    end
+    if #allCardNames == 0 then return end
+    local cardName = room:askForChoice(player, allCardNames, self.name)
+    table.insert(mark, cardName)
+    room:setPlayerMark(player, "joy__huairou-turn", mark)
+    room:moveCardTo(table.random(allCardMapper[cardName]), Card.PlayerHand, player, fk.ReasonPrey, self.name)
+  end,
+}
+lukang:addSkill(huairou)
+
+Fk:loadTranslationTable{
+  ["joy__lukang"] = "陆抗",
+  ["#joy__lukang"] = "社稷之瑰宝",
+  ["joy__jueyan"] = "决堰",
+  [":joy__jueyan"] = "出牌阶段限一次，你可以废除你装备区里的一种装备栏，然后执行对应的一项：武器栏，你于此回合内可以多使用三张【杀】；防具栏，摸三张牌，本回合手牌上限+3；2个坐骑栏，回复1点体力，本回合获得技能〖集智〗，且你使用牌无距离限制。",
+  ["RideSlot"] = "坐骑栏",
+  ["joy__huairou"] = "怀柔",
+  [":joy__huairou"] = "出牌阶段，你可以将一张已废除装备栏对应的装备牌置入弃牌堆，然后获得一张指定牌名的基本牌或锦囊牌（每牌名每回合限一次)",
+}
+
+-- shadow
+
 local yanyan = General(extension, "joy__yanyan", "shu", 4)
 local joy__juzhan = fk.CreateTriggerSkill{
   name = "joy__juzhan",
@@ -122,6 +242,8 @@ Fk:loadTranslationTable{
   ["$joy__juzhan1"] = "砍头便砍头，何为怒耶！",
   ["$joy__juzhan2"] = "我州但有断头将军，无降将军也！",
 }
+
+-- god
 
 local godsimayi = General(extension, "joy__godsimayi", "god", 3)
 local joy__renjie = fk.CreateTriggerSkill{
