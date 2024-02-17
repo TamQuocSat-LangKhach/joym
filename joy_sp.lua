@@ -7,6 +7,8 @@ Fk:loadTranslationTable{
   ["joysp"] = "欢乐SP",
 }
 
+local U = require "packages/utility/utility"
+
 --几乎全新技能组的武将
 --于吉 左慈 甘夫人 SP大乔 SP小乔 SP甄姬 神张辽 神典韦 神孙权 神大小乔 神华佗 神貂蝉
 Fk:loadTranslationTable{
@@ -859,6 +861,134 @@ Fk:loadTranslationTable{
 
   ["$joy__benyue1"] = "纵令奔月成仙去，且作行云入梦来",
   ["$joy__benyue2"] = "一入月宫去，千秋闭峨眉",
+}
+
+local joy__nvwa = General(extension, "joy__nvwa", "god", 69, 159, General.Female)
+local joy__butian = fk.CreateTriggerSkill{
+  name = "joy__butian",
+  frequency = Skill.Compulsory,
+  events = { fk.DamageCaused , fk.DamageInflicted, fk.RoundEnd, fk.HpChanged, fk.MaxHpChanged, fk.GameStart, fk.EventAcquireSkill},
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.DamageCaused then
+      return player:getLostHp() > 4 and target == player and data.to ~= player
+    elseif event == fk.DamageInflicted then
+      return player:getLostHp() > 4 and target == player
+    elseif event == fk.RoundEnd then
+      return player:getLostHp() > 4
+    elseif player.maxHp == player.hp then
+      if event == fk.GameStart then return true end
+      if event == fk.EventAcquireSkill then return data == self and target == player and player.room:getTag("RoundCount") end
+      return target == player
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local x = player:getLostHp() // 5
+    if event == fk.DamageCaused then
+      room:recover { num = x, skillName = self.name, who = player, recoverBy = player}
+    elseif event == fk.DamageInflicted or event == fk.RoundEnd then
+      room:loseHp(player, x, self.name)
+    else
+      for _, p in ipairs(room:getOtherPlayers(player)) do
+        if not p.dead then
+          room:killPlayer({ who = p.id })
+        end
+      end
+    end
+  end
+}
+joy__nvwa:addSkill(joy__butian)
+local joy__lianshi = fk.CreateTriggerSkill{
+  name = "joy__lianshi",
+  frequency = Skill.Compulsory,
+  events = { fk.AfterCardsMove },
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) then
+      local mark = U.getMark(player, "@joy__lianshi")
+      local suits, num = {}, 0
+      for _, move in ipairs(data) do
+        if move.from == player.id and (move.moveReason == fk.ReasonUse or move.moveReason == fk.ReasonResonpse or move.moveReason == fk.ReasonDiscard) then
+          for _, info in ipairs(move.moveInfo) do
+            local card = Fk:getCardById(info.cardId)
+            if card.suit ~= Card.NoSuit and not table.contains(mark, card:getSuitString(true)) and (info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerHand) then
+              num = math.max(num, card.number)
+              table.insertIfNeed(suits, card:getSuitString(true))
+            end
+          end
+        end
+      end
+      if #suits > 0 then
+        self.cost_data = {suits, num}
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local suits, num = table.unpack(self.cost_data)
+    local mark = U.getMark(player, "@joy__lianshi")
+    table.insertTable(mark, suits)
+    room:setPlayerMark(player, "@joy__lianshi", mark)
+    if #mark == 4 then
+      player:drawCards(1, self.name)
+      room:recover { num = num, skillName = self.name, who = player, recoverBy = player}
+      room:setPlayerMark(player, "@joy__lianshi", 0)
+    end
+  end,
+}
+local joy__lianshi_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__lianshi_maxcards",
+  fixed_func = function(self, player)
+    if player:hasSkill(joy__lianshi) then
+      return 5
+    end
+  end
+}
+joy__lianshi:addRelatedSkill(joy__lianshi_maxcards)
+joy__nvwa:addSkill(joy__lianshi)
+local joy__tuantu = fk.CreateActiveSkill{
+  name = "joy__tuantu",
+  anim_type = "drawcard",
+  card_num = 0,
+  target_num = 0,
+  card_filter = Util.FalseFunc,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isKongcheng()
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local get, map = {}, {}
+    for _, id in ipairs(player.player_cards[Player.Hand]) do
+      map[Fk:getCardById(id).trueName] = {}
+    end
+    for _, id in ipairs(room.discard_pile) do
+      local name = Fk:getCardById(id).trueName
+      if map[name] then
+        table.insert(map[name], id)
+      end
+    end
+    for _, cards in pairs(map) do
+      if #cards > 0 then
+        table.insert(get, table.random(cards))
+      end
+    end
+    if #get > 0 then
+      room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, true, player.id)
+    end
+  end,
+}
+joy__nvwa:addSkill(joy__tuantu)
+Fk:loadTranslationTable{
+  ["joy__nvwa"] = "女娲",
+  ["#joy__nvwa"] = "创世女神",
+  ["joy__butian"] = "补天",
+  [":joy__butian"] = "锁定技，你对其他角色造成伤害时，回复X点体力。每轮结束时，或你受到伤害时，你失去X点体力。当你体力值等于体力上限时，令所有其他角色依次死亡（X为你已损失体力的20%，向下取整）。",
+  ["joy__lianshi"] = "炼石",
+  [":joy__lianshi"] = "锁定技，你的手牌上限基数为5；每当你使用、打出或弃置牌时，记录此牌花色，然后若已记录四种花色，你摸一张牌并回复X点体力，然后清空花色记录（X为最后记录的花色对应的牌的点数，对应多张牌时取最高值）。",
+  ["@joy__lianshi"] = "炼石",
+  ["joy__tuantu"] = "抟土",
+  [":joy__tuantu"] = "出牌阶段限一次，你可以从弃牌堆获得与手牌中牌名相同的牌各一张。",
 }
 
 return extension
