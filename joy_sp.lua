@@ -577,10 +577,9 @@ local joy__meihun = fk.CreateTriggerSkill{
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
-    local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
-      return not p:isNude() end), function(p) return p.id end)
+    local targets = table.filter(room:getOtherPlayers(player), function(p) return not p:isNude() end)
     if #targets == 0 then return end
-    local to = room:askForChoosePlayers(player, targets, 1, 1, "#joy__meihun-choose", self.name, true)
+    local to = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__meihun-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
       return true
@@ -589,25 +588,18 @@ local joy__meihun = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     local to = room:getPlayerById(self.cost_data)
-    local suits = {"spade", "heart", "club", "diamond"}
-    local choices = table.map(suits, function(s) return Fk:translate("log_"..s) end)
-    local choice = room:askForChoice(player, choices, self.name, "#joy__meihun-choice::"..to.id)
-    local suit = suits[table.indexOf(choices, choice)]
-    local dummy = Fk:cloneCard("dilu")
+    local choice = room:askForChoice(player, {"log_spade", "log_heart", "log_club", "log_diamond"}, self.name, "#joy__meihun-choice::"..to.id)
+    local cards = {}
     for _, id in ipairs(to:getCardIds("he")) do
-      if Fk:getCardById(id):getSuitString() == suit then
-        dummy:addSubcard(id)
+      if Fk:getCardById(id):getSuitString(true) == choice then
+        table.insert(cards, id)
       end
     end
-    if #dummy.subcards > 0 then
-      room:obtainCard(player, dummy, false, fk.ReasonGive)
+    if #cards > 0 then
+      room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonGive, self.name, nil, false, to.id)
     elseif not to:isKongcheng() then
-      local cards = table.simpleClone(to:getCardIds("h"))
-      room:fillAG(player, cards)
-      local id = room:askForAG(player, cards, false, self.name)
-      room:closeAG(player)
-      if not id then return false end
-      room:obtainCard(player, id, false, fk.ReasonPrey)
+      local id = room:askForCardChosen(player, to, { card_data = { { "$Hand", to:getCardIds(Player.Hand) }  } }, self.name)
+      room:moveCardTo(id, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, false, player.id)
     end
   end,
 }
