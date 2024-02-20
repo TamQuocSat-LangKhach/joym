@@ -851,8 +851,8 @@ Fk:loadTranslationTable{
   [":joy__guanghan"] = "锁定技，当一名角色受到伤害后，与其相邻的其他角色需弃置一张手牌，否则失去等量体力。",
   ["#joy__guanghan-discard"] = "广寒：你需弃置一张手牌，否则失去 %arg 点体力",
 
-  ["$joy__benyue1"] = "纵令奔月成仙去，且作行云入梦来",
-  ["$joy__benyue2"] = "一入月宫去，千秋闭峨眉",
+  ["$joy__benyue1"] = "一入月宫去，千秋闭峨眉",
+  ["$joy__benyue2"] = "纵令奔月成仙去，且作行云入梦来",
 }
 
 local joy__nvwa = General(extension, "joy__nvwa", "god", 69, 159, General.Female)
@@ -981,6 +981,234 @@ Fk:loadTranslationTable{
   ["@joy__lianshi"] = "炼石",
   ["joy__tuantu"] = "抟土",
   [":joy__tuantu"] = "出牌阶段限一次，你可以从弃牌堆获得与手牌中牌名相同的牌各一张。",
+}
+
+local joy__godzuoci = General(extension, "joy__godzuoci", "god", 3)
+
+GetHuanPile = function (room)
+  local cards = room:getTag("joy__huanshu_pile")
+  if cards == nil then
+    cards = {}
+    -- 会忽略模式牌堆黑名单（例如忠胆英杰） so bad
+    for _, id in ipairs(Fk:getAllCardIds()) do
+      local c = Fk:getCardById(id, true)
+      if not c.is_derived then
+        local card = room:printCard(c.name, c.suit, c.number)
+        room:setCardMark(card, "@@joy__huanshu_card", 1)
+        table.insert(cards, card.id)
+      end
+    end
+    table.shuffle(cards)
+    room:setTag("joy__huanshu_pile", cards)
+  end
+  local temp = table.filter(cards, function(id) return room:getCardArea(id) == Card.Void end)
+  return temp
+end
+
+---@param player ServerPlayer
+GetHuanCard = function (player, n, skillName)
+  local room = player.room
+  if player.dead then return end
+  local max_num = 2 * player.maxHp
+  local has_num = #table.filter(player.player_cards[Player.Hand], function (id)
+    return Fk:getCardById(id):getMark("@@joy__huanshu_card") ~= 0
+  end)
+  local get_num  = math.max(0, math.min(n, max_num - has_num))
+  local draw_num = n - get_num
+  if get_num > 0 then
+    local pile = GetHuanPile(room)
+    if #pile > 0 then
+      room:moveCardTo(table.random(pile, get_num), Card.PlayerHand, player, fk.ReasonPrey, skillName)
+    end
+  end
+  if not player.dead and draw_num > 0 then
+    player:drawCards(draw_num, skillName)
+  end
+end
+
+local joy__huanshu = fk.CreateTriggerSkill{
+  name = "joy__huanshu",
+  anim_type = "control",
+  frequency = Skill.Compulsory,
+  events = {fk.RoundStart, fk.Damaged, fk.EventPhaseStart, fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.EventPhaseStart then
+      return target == player and player.phase == Player.Play and not player:isKongcheng()
+    elseif event == fk.AfterCardsMove then
+      local cards = {}
+      for _, move in ipairs(data) do
+        if move.to and move.to ~= player.id and move.toArea == Player.Hand then
+          local to = player.room:getPlayerById(move.to)
+          if not to:hasSkill(self) then
+            for _, info in ipairs(move.moveInfo) do
+              if Fk:getCardById(info.cardId):getMark("@@joy__huanshu_card") ~= 0 and table.contains(to.player_cards[Player.Hand], info.cardId) then
+                table.insertIfNeed(cards, info.cardId)
+              end
+            end
+          end
+        end
+      end
+      if #cards > 0 then
+        self.cost_data = cards
+        return true
+      end
+    else
+      return (event == fk.RoundStart or target == player)
+    end
+  end,
+  on_trigger = function(self, event, target, player, data)
+    local n = event == fk.Damaged and data.damage or 1
+    for i = 1, n do
+      if player.dead then break end
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.EventPhaseStart then
+      local cards, map = {}, {}
+      for _, id in ipairs(player.player_cards[Player.Hand]) do
+        local c = Fk:getCardById(id)
+        if c:getMark("@@joy__huanshu_card") == 1 then
+          table.insert(cards, id)
+          if map[c.suit] == nil then
+            map[c.suit] = {id}
+          else
+            table.insert(map[c.suit], id)
+          end
+        end
+      end
+      if #cards == 0 then return end
+      room:delay(500)
+      -- 暂无不产生移动的换牌方式
+      room:moveCardTo(cards, Card.Void, nil, fk.ReasonJustMove, self.name)
+      if player.dead then return end
+      local pile = GetHuanPile(room)
+      local get = {}
+      while #pile > 0 and #cards > 0 do
+        local t = table.remove(pile, math.random(#pile))
+        local suit = Fk:getCardById(t, true).suit
+        if map[suit] and #map[suit] > 0 then
+          table.insert(get, t)
+          table.remove(map[suit], 1)
+          table.remove(cards, 1)
+        end
+      end
+      if #get > 0 then
+        room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+      end
+    elseif event == fk.AfterCardsMove then
+      room:moveCardTo(self.cost_data, Card.Void, nil, fk.ReasonJustMove, self.name)
+      if not player.dead then
+        player:drawCards(1, self.name)
+      end
+    else
+      GetHuanCard (player, 2, self.name)
+    end
+  end,
+}
+local joy__huanshu_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__huanshu_maxcards",
+  exclude_from = function(self, player, card)
+    return player:hasSkill(joy__huanshu) and card and card:getMark("@@joy__huanshu_card") ~= 0
+  end,
+}
+joy__huanshu:addRelatedSkill(joy__huanshu_maxcards)
+joy__godzuoci:addSkill(joy__huanshu)
+
+local joy__huanhua = fk.CreateActiveSkill{
+  name = "joy__huanhua",
+  card_num = 2,
+  target_num = 0,
+  prompt = "#joy__huanhua-prompt",
+  card_filter = function(self, to_select, selected)
+    if not table.contains(Self.player_cards[Player.Hand], to_select) then return false end
+    local card = Fk:getCardById(to_select)
+    if #selected == 0 then
+      return card:getMark("@@joy__huanshu_card") == 1
+    elseif #selected == 1 then
+      return Fk:getCardById(selected[1]):getMark("@@joy__huanshu_card") == 1
+      and card.type ~= Card.TypeEquip and card:getMark("joy__huanhua_tar-inhand") == 0
+      and (card:getMark("@@joy__huanshu_card") == 0 or Self:getMark("@joy__huanjing-turn") > 0)
+    end
+  end,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryTurn) < (2 + player:getMark("@joy__huanjing-turn"))
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local huan_card = Fk:getCardById(effect.cards[1])
+    local tar_card = Fk:getCardById(effect.cards[2])
+    local get = huan_card.suit == tar_card.suit
+    room:setCardMark(tar_card, "joy__huanhua_tar-inhand", 1)
+    room:setCardMark(huan_card, "@@joy__huanshu_card", {tar_card.name, tar_card.suit, tar_card.number})
+    Fk:filterCard(huan_card.id, player)
+    if get then
+      GetHuanCard (player, 1, self.name)
+    end
+  end,
+}
+local joy__huanhua_filter = fk.CreateFilterSkill{
+  name = "#joy__huanhua_filter",
+  card_filter = function(self, card, player)
+    return type(card:getMark("@@joy__huanshu_card")) == "table" and table.contains(player.player_cards[Player.Hand], card.id)
+  end,
+  view_as = function(self, card)
+    local mark = card:getMark("@@joy__huanshu_card")
+    local c = Fk:cloneCard(mark[1], mark[2], mark[3])
+    c.skillName = "joy__huanhua"
+    return c
+  end,
+}
+joy__huanhua:addRelatedSkill(joy__huanhua_filter)
+joy__godzuoci:addSkill(joy__huanhua)
+
+local joy__huanjing = fk.CreateActiveSkill{
+  name = "joy__huanjing",
+  card_num = 0,
+  target_num = 0,
+  prompt = function()
+    return "#joy__huanjing-prompt:::"..math.max(1, 2 * Self:getLostHp())
+  end,
+  card_filter = Util.FalseFunc,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local x = math.max(1, 2 * player:getLostHp())
+    room:addPlayerMark(player, "@joy__huanjing-turn", x)
+    GetHuanCard (player, x, self.name)
+  end,
+}
+joy__godzuoci:addSkill(joy__huanjing)
+
+Fk:loadTranslationTable{
+  ["joy__godzuoci"] = "神左慈",
+
+  ["joy__huanshu"] = "幻术",
+  [":joy__huanshu"] = "锁定技，每当你受到1点伤害后及每轮开始时，你获得两张幻术牌（幻术牌为开启牌中随机牌的复制），幻术牌不计入手牌上限且数量至多为你体力上限的两倍（若已达幻术牌上限，超出上限的部分将改为摸等量的牌）；出牌阶段开始时，手牌中所有未“幻化”的幻术牌将变换为同花色的其他牌；其他角色获得幻术牌后销毁之，然后你摸一张牌。",
+  ["@@joy__huanshu_card"] = "幻术",
+
+  ["joy__huanhua"] = "幻化",
+  [":joy__huanhua"] = "每回合限两次，出牌阶段，你可以幻化手中的一张未“幻化”的幻术牌，令此牌的牌名、花色、点数变化为与你的一张未成为幻化目标的非装备手牌（除幻术牌外）一致，然后若幻化目标与原幻术牌的花色相同，你获得一张幻术牌。",
+  -- 虚拟装备可不行，村了
+  ["#joy__huanhua-prompt"] = "幻化：先选要被“幻化”的幻术牌，再选此幻术牌将变成的牌",
+  ["#joy__huanhua_filter"] = "幻化",
+
+  ["joy__huanjing"] = "幻境",
+  [":joy__huanjing"] = "限定技，出牌阶段，你可以获得X张幻术牌，直到本回合结束：〖幻化〗发动次数上限增加X，且幻术牌可以成为“幻化”目标（X为你当前已损失体力值*2，且至少为1）。",
+  ["#joy__huanjing-prompt"] = "幻境：获得 %arg 张幻术牌，“幻化”次数增加 %arg 次",
+  ["@joy__huanjing-turn"] = "幻境",
+
+  ["$joy__huanshu1"] = "穷则变，变则通，通则久。",
+  ["$joy__huanshu2"] = "天动地宁，变化百灵。",
+  ["$joy__huanhua1"] = "此事易耳。",
+  ["$joy__huanhua2"] = "呵呵，这有何难？",
+  ["$joy__huanjing1"] = "借小千世界，行无常勾魂！",
+  ["$joy__huanjing2"] = "金丹九转，变化万端！",
+  ["~joy__godzuoci"] = "当世荣华，不足贪……",
 }
 
 return extension
