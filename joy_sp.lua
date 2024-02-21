@@ -851,8 +851,12 @@ Fk:loadTranslationTable{
   [":joy__guanghan"] = "锁定技，当一名角色受到伤害后，与其相邻的其他角色需弃置一张手牌，否则失去等量体力。",
   ["#joy__guanghan-discard"] = "广寒：你需弃置一张手牌，否则失去 %arg 点体力",
 
-  ["$joy__benyue1"] = "一入月宫去，千秋闭峨眉",
-  ["$joy__benyue2"] = "纵令奔月成仙去，且作行云入梦来",
+  ["$joy__daoyao1"] = "入河蟾不没，捣药兔长生！",
+  ["$joy__daoyao2"] = "转空轧軏冰轮响，捣药叮当玉杵鸣！",
+  ["$joy__benyue1"] = "一入月宫去，千秋闭峨眉。",
+  ["$joy__benyue2"] = "纵令奔月成仙去，且作行云入梦来。",
+  ["$joy__guanghan1"] = "银河无声月宫冷，思念如影伴孤灯。",
+  ["$joy__guanghan2"] = "月宫清冷人独立，寒梦纷飞思绪深。",
 }
 
 local joy__nvwa = General(extension, "joy__nvwa", "god", 69, 159, General.Female)
@@ -981,6 +985,13 @@ Fk:loadTranslationTable{
   ["@joy__lianshi"] = "炼石",
   ["joy__tuantu"] = "抟土",
   [":joy__tuantu"] = "出牌阶段限一次，你可以从弃牌堆获得与手牌中牌名相同的牌各一张。",
+
+  ["$joy__butian1"] = "断鳌足，以立四极！",
+  ["$joy__butian2"] = "洪水涸，九州平！",
+  ["$joy__lianshi1"] = "采五方，凝五色，炼石补天，定胜万难！",
+  ["$joy__lianshi2"] = "五色蕴华，万物化生！",
+  ["$joy__tuantu1"] = "抟黄土作人，力不暇供！",
+  ["$joy__tuantu2"] = "引绳于泥中，举以为人！",
 }
 
 local joy__godzuoci = General(extension, "joy__godzuoci", "god", 3)

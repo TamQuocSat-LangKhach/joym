@@ -688,6 +688,107 @@ Fk:loadTranslationTable{
   ["@joy_mou__zhaxiang-turn"] = "诈降",
 }
 
+local machao = General:new(extension, "joy_mou__machao", "shu", 4)
+local joy__yuma = fk.CreateTriggerSkill{
+  name = "joy__yuma",
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  events = {fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return end
+    for _, move in ipairs(data) do
+      if move.from == player.id then
+        for _, info in ipairs(move.moveInfo) do
+          if info.fromArea == Card.PlayerEquip and (Fk:getCardById(info.cardId).sub_type == Card.SubtypeDefensiveRide or Fk:getCardById(info.cardId).sub_type == Card.SubtypeOffensiveRide) then
+            return true
+          end
+        end
+      end
+    end
+  end,
+  on_trigger = function(self, event, target, player, data)
+    local n = 0
+    for _, move in ipairs(data) do
+      if move.from == player.id then
+        for _, info in ipairs(move.moveInfo) do
+          if info.fromArea == Card.PlayerEquip and (Fk:getCardById(info.cardId).sub_type == Card.SubtypeDefensiveRide or Fk:getCardById(info.cardId).sub_type == Card.SubtypeOffensiveRide) then
+            n = n + 1
+          end
+        end
+      end
+    end
+    for _ = 1, n do
+      if  not player:hasSkill(self) then break end
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    player:drawCards(2, self.name)
+  end,
+}
+local joy__yuma_distance = fk.CreateDistanceSkill{
+  name = "#joy__yuma_distance",
+  correct_func = function(self, from, to)
+    if from:hasSkill(joy__yuma) then
+      return -1
+    end
+  end,
+}
+joy__yuma:addRelatedSkill(joy__yuma_distance)
+machao:addSkill(joy__yuma)
+local tieji = fk.CreateTriggerSkill{
+  name = "joy_mou__tieji",
+  anim_type = "offensive",
+  events = {fk.TargetSpecified},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.to ~= player.id and
+      data.card.trueName == "slash"
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:notifySkillInvoked(player, self.name)
+    player:broadcastSkillInvoke("mou__tieji", 1)
+    local to = room:getPlayerById(data.to)
+    data.disresponsive = true
+    room:addPlayerMark(to, "@@tieji-turn")
+    room:addPlayerMark(to, MarkEnum.UncompulsoryInvalidity .. "-turn")
+    local choices = U.doStrategy(room, player, to, {"tieji-zhiqu","tieji-raozheng"}, {"tieji-chuzheng","tieji-huwei"}, self.name, 1)
+    local win = true
+    if choices[1] == "tieji-zhiqu" and choices[2] ~= "tieji-chuzheng" then
+      player:broadcastSkillInvoke("mou__tieji", 2)
+      if not to:isNude() then
+        local card = room:askForCardChosen(player, to, "he", self.name)
+        room:obtainCard(player, card, false, fk.ReasonPrey)
+      end
+    elseif choices[1] == "tieji-raozheng" and choices[2] ~= "tieji-huwei" then
+      player:broadcastSkillInvoke("mou__tieji", 3)
+      player:drawCards(2, self.name)
+    else
+      win = false
+      player:broadcastSkillInvoke("mou__tieji", 4)
+    end
+    if win then
+      room:addPlayerMark(player, MarkEnum.SlashResidue.."-turn")
+      if not player:isKongcheng() and #room:askForDiscard(player, 1, 1, false, self.name, true, ".", "#joy_mou__tieji-discard") > 0 then
+        local ids = room:getCardsFromPileByRule("slash")
+        if #ids > 0 then
+          room:moveCardTo(ids, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+        end
+      end
+    end
+  end,
+}
+machao:addSkill(tieji)
+Fk:loadTranslationTable{
+  ["joy_mou__machao"] = "谋马超",
+  ["#joy_mou__machao"] = "阻戎负勇",
+  ["joy__yuma"] = "驭马",
+  [":joy__yuma"] = "锁定技，你计算与其他角色距离-1；每当你失去装备区一张坐骑牌后，你摸两张牌。",
+  ["joy_mou__tieji"] = "铁骑",
+  [":joy_mou__tieji"] = "每当你使用【杀】指定其他角色为目标后，你可令其不能响应此【杀】，且所有非锁定技失效直到回合结束。然后你与其进行谋弈：①“直取敌营”，你获得其一张牌；②“扰阵疲敌”，你摸两张牌。若你谋奕成功，本回合使用【杀】上次数限+1，且可以弃置一张手牌，获得一张【杀】。",
+  ["#joy_mou__tieji-discard"] = "铁骑：可以弃置一张手牌，获得一张【杀】",
+}
 
 
 local joy__zhugedan = General(extension, "joy__zhugedan", "wei", 4)
