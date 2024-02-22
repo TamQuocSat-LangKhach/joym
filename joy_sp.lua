@@ -1179,6 +1179,7 @@ local joy__huanjing = fk.CreateActiveSkill{
   name = "joy__huanjing",
   card_num = 0,
   target_num = 0,
+  frequency = Skill.Limited,
   prompt = function()
     return "#joy__huanjing-prompt:::"..math.max(1, 2 * Self:getLostHp())
   end,
