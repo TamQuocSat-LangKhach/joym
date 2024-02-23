@@ -1223,4 +1223,294 @@ Fk:loadTranslationTable{
   ["~joy__godzuoci"] = "当世荣华，不足贪……",
 }
 
+local joy__goddaxiaoqiao = General(extension, "joy__goddaxiaoqiao", "god", 4, 4, General.Female)
+
+local joy__shuangshu = fk.CreateTriggerSkill{
+  name = "joy__shuangshu",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and player.phase == Player.Start
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local cards = room:getNCards(2)
+    local get = true
+    player:showCards(cards)
+    for i = #cards, 1, -1 do
+      local id = cards[i]
+      table.insert(room.draw_pile, 1, id)
+      if Fk:getCardById(id).color ~= Card.Black then
+        get = false
+        if Fk:getCardById(id).suit == Card.Diamond then
+          room:setCardEmotion(id, "judgegood")
+          room:setPlayerMark(player, "joy__shuangshu_pt-turn", 1)
+        elseif Fk:getCardById(id).suit == Card.Heart then
+          room:setCardEmotion(id, "judgegood")
+          room:setPlayerMark(player, "joy__shuangshu_yz-turn", 1)
+        end
+      end
+    end
+    if get then
+      room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+    end
+  end,
+}
+joy__goddaxiaoqiao:addSkill(joy__shuangshu)
+
+local joy__pinting = fk.CreateTriggerSkill{
+  name = "joy__pinting",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and player.phase == Player.Play
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local n = 2 + player:getMark("joy__shuangshu_pt-turn")
+    local all_choices = {}
+    for i = 1, 4 do
+      table.insert(all_choices, "joy__pinting_choice"..i)
+    end
+    local choices = room:askForChoices(player, all_choices, 1, n, self.name, "#joy__pinting-choice:::"..n)
+    local list = {}
+    for i = 1, 4 do
+      if table.contains(choices, "joy__pinting_choice"..i) then
+        table.insert(list, i)
+      end
+    end
+    room:setPlayerMark(player, "@joy__pinting_choices-phase", table.concat(list, "-"))
+    if table.contains(list, 1) and #room.logic:getEventsOfScope(GameEvent.UseCard, 1, function(e)
+      return e.data[1].from == player.id
+    end, Player.HistoryPhase) == 0 then
+      room:setPlayerMark(player, "joy__pinting_tmd-phase", 1)
+    end
+  end,
+
+  refresh_events = {fk.AfterCardUseDeclared},
+  can_refresh = function (self, event, target, player, data)
+    return target == player and player:getMark("joy__pinting_tmd-phase") > 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    player.room:setPlayerMark(player, "joy__pinting_tmd-phase", 0)
+  end,
+}
+local joy__pinting_delay = fk.CreateTriggerSkill{
+  name = "#joy__pinting_delay",
+  events = {fk.CardUsing, fk.CardUseFinished},
+  can_trigger = function(self, event, target, player, data)
+    local mark = player:getMark("@joy__pinting_choices-phase")
+    if target == player and mark ~= 0 then
+      local events = player.room.logic:getEventsOfScope(GameEvent.UseCard, 4, function(e)
+        return e.data[1].from == player.id
+      end, Player.HistoryPhase)
+      if event == fk.CardUseFinished then
+        if string.find(mark, "3") and events[3] and events[3].data[1] == data and player.room:getCardArea(data.card) == Card.Processing then
+          self.cost_data = 3
+          return true
+        end
+      else
+        for _, i in ipairs({2,4}) do
+          if string.find(mark, tostring(i)) and events[i] and events[i].data[1] == data then
+            self.cost_data = i
+            return true
+          end
+        end
+      end
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if self.cost_data == 2 then
+      room:moveCardTo(data.card, Card.PlayerHand, player, fk.ReasonPrey, "joy__pinting")
+    elseif self.cost_data == 3 then
+      player:drawCards(2, "joy__pinting")
+    else
+      data.additionalEffect = (data.additionalEffect or 0) + 1
+    end
+  end,
+}
+local joy__pinting_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__pinting_targetmod",
+  bypass_distances = function(self, player)
+    return player:getMark("joy__pinting_tmd-phase") > 0
+  end,
+}
+joy__pinting:addRelatedSkill(joy__pinting_delay)
+joy__pinting:addRelatedSkill(joy__pinting_targetmod)
+joy__goddaxiaoqiao:addSkill(joy__pinting)
+
+---@param room Room
+local getYizhengChoices = function (room, except)
+  local choices = {}
+  local map = {["weapon"] = {Card.SubtypeWeapon}, ["armor"] = {Card.SubtypeArmor},
+  ["equip_horse"] = {Card.SubtypeOffensiveRide, Card.SubtypeDefensiveRide}}
+  for _, p in ipairs(room.alive_players) do
+    for str, sub_types in pairs(map) do
+      if not table.contains(choices, str) then
+        for _, s in ipairs(sub_types) do
+          local id = p:getEquipment(s)
+          if id and table.find(room.alive_players, function (p2) return p:canMoveCardInBoardTo(p2, id) end) then
+            table.insert(choices, str)
+            break
+          end
+        end
+      end
+    end
+    if #choices == 3 then break end
+  end
+  table.removeOne(choices, except)
+  return choices
+end
+
+local doYizheng = function (player, dat)
+  local room = player.room
+  local from = room:getPlayerById(dat.targets[1])
+  local to = room:getPlayerById(dat.targets[2])
+  local choice = dat.interaction
+  local map = {["weapon"] = {Card.SubtypeWeapon}, ["armor"] = {Card.SubtypeArmor},
+  ["equip_horse"] = {Card.SubtypeOffensiveRide, Card.SubtypeDefensiveRide}}
+  local sub_types =  map[choice]
+  local cards = {}
+  for _, s in ipairs(sub_types) do
+    local id = from:getEquipment(s)
+    if id and to:getEquipment(s) == nil then
+      table.insert(cards, id)
+    end
+  end
+  if #cards == 0 then return end
+  local cardId = room:askForCardChosen(player, from, { card_data = { { from.general, cards }  } }, "joy__yizhengg")
+  room:moveCardTo(cardId, Card.PlayerEquip, to, fk.ReasonPut, "joy__yizhengg", nil, true, player.id)
+end
+
+local joy__yizhengg = fk.CreateTriggerSkill{
+  name = "joy__yizhengg",
+  events = {fk.EventPhaseEnd},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and player.phase == Player.Play
+  end,
+  on_cost = function (self, event, target, player, data)
+    local room = player.room
+    local choices = getYizhengChoices(room)
+    if #choices > 0 then
+      local _,dat = room:askForUseActiveSkill(player, "joy__yizhengg_active", "#joy__yizhengg-move", true, {joy__yizhengg_choices = choices})
+      if dat then
+        self.cost_data = dat
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local dat = self.cost_data
+    doYizheng (player, dat)
+    local once = true
+    if player:getMark("joy__shuangshu_yz-turn") > 0 then
+      local choices = getYizhengChoices(room, dat.interaction)
+      if #choices > 0 then
+        local _, _dat = room:askForUseActiveSkill(player, "joy__yizhengg_active", "#joy__yizhengg-move", true, {joy__yizhengg_choices = choices})
+        if _dat then
+          doYizheng (player, _dat)
+          once = false
+        end
+      end
+    end
+    if player.dead then return end
+    if once then
+      if player:isWounded() then
+        room:recover { num = 1, skillName = self.name, who = player, recoverBy = player}
+      end
+    else
+      room:setPlayerMark(player, "@@joy__yizhengg", 1)
+    end
+  end,
+}
+local joy__yizhengg_active = fk.CreateActiveSkill{
+  name = "joy__yizhengg_active",
+  card_num = 0,
+  target_num = 2,
+  interaction = function(self)
+    return UI.ComboBox {choices = self.joy__yizhengg_choices or {} , all_choices = {"weapon","armor","equip_horse"} }
+  end,
+  card_filter = Util.FalseFunc,
+  target_filter = function(self, to_select, selected)
+    local choice = self.interaction.data
+    if not choice then return end
+    local map = {["weapon"] = {Card.SubtypeWeapon}, ["armor"] = {Card.SubtypeArmor},
+    ["equip_horse"] = {Card.SubtypeOffensiveRide, Card.SubtypeDefensiveRide}}
+    local sub_types =  map[choice]
+    local to = Fk:currentRoom():getPlayerById(to_select)
+    if #selected == 0 then
+      return table.find(sub_types, function(s) return to:getEquipment(s) end)
+    elseif #selected == 1 then
+      local first = Fk:currentRoom():getPlayerById(selected[1])
+      return table.find(sub_types, function(s) return first:getEquipment(s) and to:getEquipment(s) == nil end)
+    end
+  end,
+}
+local joy__yizhengg_delay = fk.CreateTriggerSkill{
+  name = "#joy__yizhengg_delay",
+  mute = true,
+  events = {fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if player.dead or player:getMark("@@joy__yizhengg") == 0 then return false end
+    local x = 0
+    local color
+    for _, move in ipairs(data) do
+      if move.from == player.id then
+        for _, info in ipairs(move.moveInfo) do
+          if info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerEquip then
+            x = x + 1
+          end
+        end
+      end
+    end
+    if x > 0 then
+      self.cost_data = x
+      return true
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    player:drawCards(self.cost_data, "joy__yizhengg")
+  end,
+
+  refresh_events = {fk.TurnStart},
+  can_refresh = function (self, event, target, player, data)
+    return target == player and player:getMark("@@joy__yizhengg") > 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    player.room:setPlayerMark(player, "@@joy__yizhengg", 0)
+  end,
+}
+Fk:addSkill(joy__yizhengg_active)
+joy__yizhengg:addRelatedSkill(joy__yizhengg_delay)
+joy__goddaxiaoqiao:addSkill(joy__yizhengg)
+
+Fk:loadTranslationTable{
+  ["joy__goddaxiaoqiao"] = "神大小乔",
+
+  ["joy__shuangshu"] = "双姝",
+  [":joy__shuangshu"] = "准备阶段，你可以展示牌堆顶的2张牌，若包含：方块：本回合“娉婷”可选择的选项个数+1；红桃：本回合“移筝”可选择的选项个数+1；只有黑色牌：你获得展示的牌。",
+
+  ["joy__pinting"] = "娉婷",
+  [":joy__pinting"] = "出牌阶段开始时，你可选择以下选项中的至多两项：1、你使用的第一张牌无距离限制；2、你使用的第二张牌返还到你的手牌；3、你使用的第三张牌结算后摸两张牌；4、你使用的第四张牌额外结算一次。",
+  ["joy__pinting_choice1"] = "第一张牌无距离限制",
+  ["joy__pinting_choice2"] = "第二张牌返还到你的手牌",
+  ["joy__pinting_choice3"] = "第三张牌结算后摸两张牌",
+  ["joy__pinting_choice4"] = "第四张牌额外结算一次",
+  ["@joy__pinting_choices-phase"] = "娉婷",
+  ["#joy__pinting-choice"] = "娉婷：请选择至多 %arg 项",
+  ["#joy__pinting_delay"] = "娉婷",
+
+  ["joy__yizhengg"] = "移筝", -- 区别义争
+  [":joy__yizhengg"] = "你的出牌阶段结束时，你可选择以下选项中的至多一项：1、移动场上的一张武器牌；2、移动场上的一张防具牌；3、移动场上的一张坐骑牌。若你以此法移动了：一张牌，回复1点体力；两张牌，直到你的下回合开始，你失去一张牌时摸一张牌。",
+  ["#joy__yizhengg_delay"] = "移筝",
+  ["@@joy__yizhengg"] = "移筝",
+  ["joy__yizhengg_active"] = "移筝",
+  ["#joy__yizhengg-move"] = "移筝：你可移动场上一张牌",
+}
+
+
+
+
 return extension
