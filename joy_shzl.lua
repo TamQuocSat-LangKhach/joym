@@ -77,7 +77,76 @@ Fk:loadTranslationTable{
   ["#joyex__tianxiang-choice"] = "天香：选择令 %dest 摸牌数",
 }
 
+-- 火
 
+local dianwei = General(extension, "joyex__dianwei", "wei", 4)
+local joyex__qiangxi = fk.CreateActiveSkill{
+  name = "joyex__qiangxi",
+  anim_type = "offensive",
+  card_num = 0,
+  target_num = 1,
+  can_use = function(self, player)
+    return player.hp > 0
+  end,
+  card_filter = Util.FalseFunc,
+  target_filter = function(self, to_select, selected)
+    if #selected == 0 and Self:inMyAttackRange(Fk:currentRoom():getPlayerById(to_select)) then
+      return not table.contains(U.getMark(Self, "joyex__qiangxi_targets-phase"), to_select)
+    end
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local mark = U.getMark(player, "joyex__qiangxi_targets-phase")
+    table.insertIfNeed(mark, target.id)
+    room:setPlayerMark(player, "joyex__qiangxi_targets-phase", mark)
+    room:loseHp(player, 1, self.name)
+    if not player.dead then
+      player:drawCards(1, self.name)
+    end
+    if not target.dead then
+      room:damage{
+        from = player,
+        to = target,
+        damage = 1,
+        skillName = self.name,
+      }
+    end
+  end,
+}
+local joyex__qiangxi_trigger = fk.CreateTriggerSkill{
+  name = "#joyex__qiangxi_trigger",
+  mute = true,
+  main_skill = joyex__qiangxi,
+  events = {fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(joyex__qiangxi) and target ~= player and not player:isNude()
+  end,
+  on_cost = function (self, event, target, player, data)
+    local cards = player.room:askForDiscard(player, 1, 1, true, "joyex__qiangxi", true, ".|.|.|.|.|equip", "#joyex__qiangxi-cost:"..target.id, true)
+    if #cards > 0 then
+      self.cost_data = cards
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:doIndicate(player.id, { target.id })
+    room:throwCard(self.cost_data, "joyex__qiangxi", player, player)
+    data.damage = data.damage + 1
+  end,
+}
+joyex__qiangxi:addRelatedSkill(joyex__qiangxi_trigger)
+dianwei:addSkill(joyex__qiangxi)
+
+Fk:loadTranslationTable{
+  ["joyex__dianwei"] = "界典韦",
+  ["#joyex__dianwei"] = "古之恶来",
+  ["joyex__qiangxi"] = "强袭",
+  [":joyex__qiangxi"] = "出牌阶段每名角色限一次，你可以失去一点体力，并摸一张牌，然后对攻击范围内一名角色造成1点伤害；每当其他角色受到伤害时，你可以弃置一张装备牌，令此伤害+1。",
+  ["#joyex__qiangxi_trigger"] = "强袭",
+  ["#joyex__qiangxi-cost"] = "强袭：你可以弃置一张装备牌，令 %src 受到的伤害+1",
+}
 
 -- 林
 

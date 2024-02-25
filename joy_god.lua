@@ -1251,6 +1251,139 @@ Fk:loadTranslationTable{
   ["#joy__shenzhen-invoke"] = "神针：移去任意“药”，令等量角色回复或失去体力",
 }
 
+local goddianwei = General(extension, "joy__goddianwei", "god", 5)
+
+local joy__shenwei = fk.CreateTriggerSkill{
+  name = "joy__shenwei",
+  anim_type = "support",
+  events = {fk.TurnStart, fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.TurnStart then
+      return target == player and player:hasSkill(self) and
+      table.find(player.room.alive_players, function (p) return p:getMark("@@joy__secure") == 0 end)
+    else
+      return not player.dead and target:getMark("@@joy__secure") == player.id
+    end
+  end,
+  on_cost = function (self, event, target, player, data)
+    if event == fk.TurnStart then
+      local targets = table.filter(player.room.alive_players, function (p) return p:getMark("@@joy__secure") == 0 end)
+      if #targets == 0 then return false end
+      local tos = player.room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__shenwei-choose", self.name, true)
+      if #tos > 0 then
+        self.cost_data = tos[1]
+        return true
+      end
+    else
+      return player.room:askForSkillInvoke(target, self.name, nil, "#joy__shenwei-invoke:"..player.id)
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      room:setPlayerMark(room:getPlayerById(self.cost_data), "@@joy__secure", player.id)
+    else
+      room:setPlayerMark(target, "@@joy__secure", 0)
+      room.logic:trigger("fk.MarkChanged", target, { name = "@@joy__secure", num = -1 })
+      room:damage{
+        from = data.from,
+        to = player,
+        damage = data.damage,
+        damageType = data.damageType,
+        skillName = data.skillName,
+        chain = data.chain,
+        card = data.card,
+      }
+      return true
+    end
+  end,
+
+  refresh_events = {fk.Deathed, fk.EventLoseSkill},
+  can_refresh = function (self, event, target, player, data)
+    if event == fk.Deathed then
+      return target == player and player:hasSkill(self, true, true)
+    else
+      return target == player and data == self
+    end
+  end,
+  on_refresh = function (self, event, target, player, data)
+    local room = player.room
+    for _, p in ipairs(room.alive_players) do
+      if p:getMark("@@joy__secure") == player.id then
+        room:setPlayerMark(p, "@@joy__secure", 0)
+      end
+    end
+  end,
+}
+goddianwei:addSkill(joy__shenwei)
+
+local joy__elai = fk.CreateTriggerSkill{
+  name = "joy__elai",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {"fk.MarkChanged"},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and data.name == "@@joy__secure" and data.num < 0
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local choices = {}
+    if player:isWounded() then table.insert(choices, "recover") end
+    local targets = table.filter(room.alive_players, function (p) return player:inMyAttackRange(p) end)
+    if #targets > 0 then
+      table.insert(choices, "joy__elai_damage")
+    end
+    if #choices == 0 then return false end
+    table.insert(choices, "Cancel")
+    local choice = room:askForChoice(player, choices, self.name)
+    if choice == "joy__elai_damage" then
+      local tos = player.room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__elai-choose", self.name, false)
+      room:damage{
+        from = player,
+        to = room:getPlayerById(tos[1]),
+        damage = 1,
+        skillName = self.name,
+      }
+    elseif choice == "recover" then
+      room:recover { num = 1, skillName = self.name, who = player, recoverBy = player }
+    end
+  end,
+}
+goddianwei:addSkill(joy__elai)
+
+local joy__kuangxi = fk.CreateTriggerSkill{
+  name = "joy__kuangxi",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {fk.DamageCaused},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and
+    table.find(player.room.alive_players, function (p) return p:getMark("@@joy__secure") > 0 end)
+  end,
+  on_use = function(self, event, target, player, data)
+    data.damage = data.damage + 1
+  end,
+}
+goddianwei:addSkill(joy__kuangxi)
+
+Fk:loadTranslationTable{
+  ["joy__goddianwei"] = "神典韦",
+
+  ["joy__shenwei"] = "神卫",
+  [":joy__shenwei"] = "回合开始时，你可以令一名没有“卫”标记的角色获得“卫”标记，该角色受到伤害时，可以移除此标记，将此伤害转移给你。",
+  ["@@joy__secure"] = "卫",
+  ["#joy__shenwei-choose"] = "神卫：令一名角色获得“卫”标记",
+  ["#joy__shenwei-invoke"] = "神卫：你可以将伤害转移给 %src",
+
+  ["joy__elai"] = "恶来",
+  [":joy__elai"] = "锁定技，当一名角色的“卫”标记移除时，你可以选一项：1.回复一点体力；2.对攻击范围内一名角色造成1点伤害。",
+  ["joy__elai_damage"] = "对攻击范围内一名角色造成伤害",
+  ["#joy__elai-choose"] = "恶来：对攻击范围内一名角色造成1点伤害",
+
+  ["joy__kuangxi"] = "狂袭",
+  [":joy__kuangxi"] = "锁定技，每当你造成伤害时，若场上存在“卫”标记，此伤害+1。",
+}
+
 
 
 

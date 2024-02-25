@@ -6,6 +6,46 @@ Fk:loadTranslationTable{
   ["joyex"] = "欢乐界",
 }
 
+local U = require "packages/utility/utility"
+
+local zhaoyun = General:new(extension, "joyex__zhaoyun", "shu", 4)
+local yajiao = fk.CreateTriggerSkill{
+  name = "joyex__yajiao",
+  anim_type = "control",
+  events = {fk.CardUsing, fk.CardResponding, fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and target == player then
+      if event == fk.EventPhaseStart then
+        return player.phase == Player.Finish and player:usedSkillTimes("ex__longdan", Player.HistoryTurn) > 0
+      else
+        return U.IsUsingHandcard(player, data) and player ~= player.room.current
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.EventPhaseStart then
+      player:drawCards(player:usedSkillTimes("ex__longdan", Player.HistoryTurn) ,self.name)
+    else
+      local cards = room:getNCards(1)
+      player:showCards(cards)
+      local tos = room:askForChoosePlayers(player, table.map(room.alive_players, Util.IdMapper), 1, 1, "#joyex__yajiao-choose:::"..Fk:getCardById(cards[1]):toLogString(), self.name, false)
+      if #tos > 0 then
+        local to = room:getPlayerById(tos[1])
+        room:moveCardTo(cards, Card.PlayerHand, to, fk.ReasonGive, self.name, nil, true, player.id)
+      end
+    end
+  end,
+}
+zhaoyun:addSkill("ex__longdan")
+zhaoyun:addSkill(yajiao)
+Fk:loadTranslationTable{
+  ["joyex__zhaoyun"] = "界赵云",
+  ["joyex__yajiao"] = "涯角",
+  [":joyex__yajiao"] = "每当你于回合外使用或打出手牌时，你可以展示牌堆顶一张牌并交给一名角色；结束阶段，你于本回合每发动一次【龙胆】，你摸一张牌。",
+  ["#joyex__yajiao-choose"] = "涯角: 将 %arg 交给一名角色",
+}
+
 
 local huangyueying = General(extension, "joyex__huangyueying", "shu", 3, 3, General.Female)
 local joyex__jizhi = fk.CreateTriggerSkill{
