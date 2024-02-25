@@ -1510,6 +1510,161 @@ Fk:loadTranslationTable{
   ["#joy__yizhengg-move"] = "移筝：你可移动场上一张牌",
 }
 
+local godhuatuo = General(extension, "joy__godhuatuo", "god", 1)
+
+local joy__jishi = fk.CreateTriggerSkill{
+  name = "joy__jishi",
+  anim_type = "support",
+  events = {fk.GameStart, fk.AfterCardsMove, fk.EnterDying},
+  can_trigger = function (self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.EnterDying then
+      return player:getMark("@joy__remedy") > 0
+    else
+      if player:getMark("@joy__remedy") > 2 then return false end
+      local n = 0
+      if event == fk.GameStart then
+        n = 3
+      elseif player ~= player.room.current then
+        for _, move in ipairs(data) do
+          if move.from == player.id then
+            for _, info in ipairs(move.moveInfo) do
+              if info.fromArea == Card.PlayerHand and Fk:getCardById(info.cardId).color == Card.Red then
+                n = n + 1
+              end
+            end
+          end
+        end
+      end
+      if n > 0 then
+        self.cost_data = n
+        return true
+      end
+    end
+  end,
+  on_cost = function (self, event, target, player, data)
+    if event == fk.EnterDying then
+      return player.room:askForSkillInvoke(player, self.name, nil, "#joy__jishi-invoke:"..target.id)
+    end
+    return true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.EnterDying then
+      room:removePlayerMark(player, "@joy__remedy")
+      room:recover { num = 1 - target.hp, skillName = self.name, who = target, recoverBy = player }
+    else
+      room:setPlayerMark(player, "@joy__remedy", math.min(3, player:getMark("@joy__remedy") + self.cost_data))
+    end
+  end,
+}
+local joy__jishi_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__jishi_maxcards",
+  correct_func = function(self, player)
+    if player:hasSkill(joy__jishi) then
+      return 3
+    end
+  end,
+}
+joy__jishi:addRelatedSkill(joy__jishi_maxcards)
+godhuatuo:addSkill(joy__jishi)
+
+local joy__taoxian = fk.CreateViewAsSkill{
+  name = "joy__taoxian",
+  anim_type = "support",
+  pattern = "peach",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).suit == Card.Heart
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return nil end
+    local c = Fk:cloneCard("peach")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+}
+local joy__taoxian_trigger = fk.CreateTriggerSkill{
+  name = "#joy__taoxian_trigger",
+  main_skill = joy__taoxian,
+  events = {fk.CardUsing},
+  can_trigger = function(self, event, target, player, data)
+    return target ~= player and player:hasSkill(joy__taoxian) and data.card.name == "peach"
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    player:drawCards(1, "joy__taoxian")
+  end,
+}
+joy__taoxian:addRelatedSkill(joy__taoxian_trigger)
+godhuatuo:addSkill(joy__taoxian)
+
+local joy__shenzhen = fk.CreateTriggerSkill{
+  name = "joy__shenzhen",
+  anim_type = "control",
+  events = {fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player:getMark("@joy__remedy") > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    local _, dat = player.room:askForUseActiveSkill(player, "joy__shenzhen_active", "#joy__shenzhen-invoke", true)
+    if dat then
+      self.cost_data = dat
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local targets = self.cost_data.targets
+    room:removePlayerMark(player, "@joy__remedy", #targets)
+    room:sortPlayersByAction(targets)
+    for _, id in ipairs(targets) do
+      local p = room:getPlayerById(id)
+      if not p.dead then
+        if self.cost_data.interaction == "recover" then
+          if not p.dead and p:isWounded() then
+            room:recover { num = 1, skillName = self.name, who = p, recoverBy = player }
+          end
+        else
+          room:loseHp(p, 1, self.name)
+        end
+      end
+    end
+  end,
+}
+local joy__shenzhen_active = fk.CreateActiveSkill{
+  name = "joy__shenzhen_active",
+  card_num = 0,
+  min_target_num = 1,
+  interaction = function()
+    return UI.ComboBox {choices = {"recover", "loseHp"}}
+  end,
+  card_filter = Util.FalseFunc,
+  target_filter = function (self, to_select, selected)
+    return #selected < Self:getMark("@joy__remedy")
+  end,
+}
+Fk:addSkill(joy__shenzhen_active)
+godhuatuo:addSkill(joy__shenzhen)
+
+Fk:loadTranslationTable{
+  ["joy__godhuatuo"] = "神华佗",
+
+  ["joy__jishi"] = "济世",
+  [":joy__jishi"] = "游戏开始时，你获得3个“药”（至多拥有3个）。每当一名角色进入濒死状态时，你可以移去1个“药”令其回复体力至1点。当你于回合外失去红色手牌时，你获得等量“药”。你的手牌上限+3。",
+  ["#joy__jishi-invoke"] = "济世：你可以移去1个“药”令 %src 回复体力至1点",
+  ["@joy__remedy"] = "药",
+
+  ["joy__taoxian"] = "桃仙",
+  [":joy__taoxian"] = "你可以将一张红桃牌当【桃】使用，其他角色使用【桃】时，你摸一张牌。",
+  ["#joy__taoxian_trigger"] = "桃仙",
+
+  ["joy__shenzhen"] = "神针",
+  [":joy__shenzhen"] = "回合开始时，你可以移去任意个“药”，然后选择一项：1. 令等量角色各回复1点体力；2. 令等量角色各失去1点体力。",
+  ["joy__shenzhen_active"] = "神针",
+  ["#joy__shenzhen-invoke"] = "神针：移去任意“药”，令等量角色回复或失去体力",
+}
+
 
 
 
