@@ -263,7 +263,222 @@ Fk:loadTranslationTable{
 
 
 
+local joy__guansuo = General(extension, "joy__guansuo", "shu", 4)
+local joy__zhengnan = fk.CreateTriggerSkill{
+  name = "joy__zhengnan",
+  anim_type = "drawcard",
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and (player:getMark(self.name) == 0 or not table.contains(player:getMark(self.name), target.id))
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local mark = player:getMark(self.name)
+    local n = 0
+      if target == player and player:hasSkill(self) then
+        n = 1
+      end
+    if mark == 0 then mark = {} end
+    table.insert(mark, target.id)
+    room:setPlayerMark(player, self.name, mark)
+    if player:isWounded() then
+      room:recover({
+        who = player,
+        num = 1+n,
+        recoverBy = player,
+        skillName = self.name
+      })
+    end
+    local choices = {"joy__wusheng", "joyex__dangxian", "ty_ex__zhiman"}
+    for i = 3, 1, -1 do
+      if player:hasSkill(choices[i], true) then
+        table.removeOne(choices, choices[i])
+      end
+    end
+    if #choices > 0 then
+      player:drawCards(1+n, self.name)
+      local choice = room:askForChoice(player, choices, self.name, "#joy__zhengnan-choice", true)
+      room:handleAddLoseSkills(player, choice, nil)
+    else
+      player:drawCards(3+n, self.name)
+    end
+  end,
+}
+local joy__xiefang = fk.CreateDistanceSkill{
+  name = "joy__xiefang",
+  correct_func = function(self, from, to)
+    if from:hasSkill(self) then
+      local n = 0
+      for _, p in ipairs(Fk:currentRoom().alive_players) do
+        if p.gender == General.Female then
+          n = n + 1
+        end
+      end
+      local m = math.max(n,1)
+      return -m
+    end
+    return 0
+  end,
+}
+local joy__xiefang_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__xiefang_maxcards",
+  correct_func = function(self, player)
+    if player:hasSkill(self) then
+      local n = 0
+      for _, p in ipairs(Fk:currentRoom().alive_players) do
+        if p.gender == General.Female then
+          n = n + 1
+        end
+      end
+      local m = math.max(n,1)
+      return m
+    end
+    return 0
+  end,
+}
 
+
+local joy__wusheng = fk.CreateTriggerSkill{
+  name = "joy__wusheng",
+  anim_type = "offensive",
+  pattern = "slash",
+  events = {fk.TurnStart, fk.AfterCardUseDeclared},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      return (event == fk.TurnStart) or (data.card.trueName == "slash" and data.card.color == Card.Red)
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      room:notifySkillInvoked(player, "joy__wusheng", "drawcard")
+      local ids = room:getCardsFromPileByRule("slash|.|heart,diamond", 1, "allPiles")
+      if #ids > 0 then
+        room:obtainCard(player, ids[1], false, fk.ReasonPrey)
+      end
+    else
+      room:notifySkillInvoked(player, "joy__wusheng", "offensive")
+      data.additionalDamage = (data.additionalDamage or 0) + 1
+    end
+  end,
+}
+joy__xiefang:addRelatedSkill(joy__xiefang_maxcards)
+joy__guansuo:addSkill(joy__zhengnan)
+joy__guansuo:addSkill(joy__xiefang)
+joy__guansuo:addRelatedSkill(joy__wusheng)
+joy__guansuo:addRelatedSkill("joyex__dangxian")
+joy__guansuo:addRelatedSkill("ty_ex__zhiman")
+Fk:loadTranslationTable{
+  ["joy__guansuo"] = "关索",
+  ["#joy__guansuo"] = "倜傥孑侠",
+
+  ["joy__zhengnan"] = "征南",
+  [":joy__zhengnan"] = "每名角色限一次，当一名角色进入濒死状态时，你可以回复1点体力，然后摸一张牌并选择获得下列技能中的一个："..
+  "〖武圣〗，〖当先〗和〖制蛮〗（若技能均已获得，则改为摸三张牌），若自己濒死，则回复体力数和摸牌数+1。",
+  ["joy__xiefang"] = "撷芳",
+  [":joy__xiefang"] = "锁定技，你计算与其他角色的距离-X,你的手牌上限+X（X为全场女性角色数且至少为1）。",
+  ["#joy__zhengnan-choice"] = "征南：选择获得的技能",
+  ["joy__wusheng"] = "武圣",
+  [":joy__wusheng"] = "回合开始时，你获得一张红色【杀】，你的红色【杀】伤害+1。",
+
+  ["$joy__wusheng_joy__guansuo"] = "我敬佩你的勇气。",
+  ["$joyex__dangxian_joy__guansuo"] = "时时居先，方可快人一步。",
+  ["$ty_ex__zhiman_joy__guansuo"] = "败军之将，自当纳贡！",
+}
+
+local joy__zhaoxiang = General(extension, "joy__zhaoxiang", "shu", 4, 4, General.Female)
+local joy__fuhan = fk.CreateTriggerSkill{
+  name = "joy__fuhan",
+  events = {fk.TurnStart},
+  frequency = Skill.Limited,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player:getMark("@meiying") > 0 and
+      player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#joy__fuhan-invoke")
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local n = player:getMark("@meiying")
+    room:setPlayerMark(player, "@meiying", 0)
+    player:drawCards(n, self.name)
+    if player.dead then return end
+
+    local generals, same_g = {}, {}
+    for _, general_name in ipairs(room.general_pile) do
+      same_g = Fk:getSameGenerals(general_name)
+      table.insert(same_g, general_name)
+      same_g = table.filter(same_g, function (g_name)
+        local general = Fk.generals[g_name]
+        return (general.kingdom == "shu" or general.subkingdom == "shu") and general.package.extensionName == "joym"
+      end)
+      if #same_g > 0 then
+        table.insert(generals, table.random(same_g))
+      end
+    end
+    if #generals == 0 then return false end
+    generals = table.random(generals, math.max(4, #room.alive_players))
+
+    local skills = {}
+    local choices = {}
+    for _, general_name in ipairs(generals) do
+      local general = Fk.generals[general_name]
+      local g_skills = {}
+      for _, skill in ipairs(general.skills) do
+        if not (table.contains({Skill.Limited, Skill.Wake, Skill.Quest}, skill.frequency) or skill.lordSkill) and
+        (#skill.attachedKingdom == 0 or (table.contains(skill.attachedKingdom, "shu") and player.kingdom == "shu")) then
+          table.insertIfNeed(g_skills, skill.name)
+        end
+      end
+      for _, s_name in ipairs(general.other_skills) do
+        local skill = Fk.skills[s_name]
+        if not (table.contains({Skill.Limited, Skill.Wake, Skill.Quest}, skill.frequency) or skill.lordSkill) and
+        (#skill.attachedKingdom == 0 or (table.contains(skill.attachedKingdom, "shu") and player.kingdom == "shu")) then
+          table.insertIfNeed(g_skills, skill.name)
+        end
+      end
+      table.insertIfNeed(skills, g_skills)
+      if #choices == 0 and #g_skills > 0 then
+        choices = {g_skills[1]}
+      end
+    end
+    if #choices > 0 then
+      local result = player.room:askForCustomDialog(player, self.name,
+      "packages/tenyear/qml/ChooseGeneralSkillsBox.qml", {
+        generals, skills, 1, 2, "#joy__fuhan-choice", false
+      })
+      if result ~= "" then
+        choices = json.decode(result)
+      end
+      room:handleAddLoseSkills(player, table.concat(choices, "|"), nil)
+    end
+
+    if not player.dead and player:isWounded() and
+    table.every(room.alive_players, function(p) return p.hp >= player.hp end) then
+      room:recover({
+        who = player,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name
+      })
+    end
+  end,
+}
+joy__zhaoxiang:addSkill("ty__fanghun")
+joy__zhaoxiang:addSkill(joy__fuhan)
+Fk:loadTranslationTable{
+  ["joy__zhaoxiang"] = "赵襄",
+  ["#joy__zhaoxiang"] = "拾梅鹊影",
+
+  ["joy__fuhan"] = "扶汉",
+  [":joy__fuhan"] = "限定技，回合开始时，若你有“梅影”标记，你可以移去所有“梅影”标记并摸等量的牌，然后从X张（X为存活人数且至少为4）蜀势力"..
+  "武将牌中选择并获得至多两个技能（限定技、觉醒技、主公技除外）。若此时你是体力值最低的角色，你回复1点体力。"..
+  '<br /><font color="red">（村：欢杀包特色，只会获得欢杀池内武将的技能）</font>',
+  ["#joy__fuhan-invoke"] = "扶汉：你可以移去“梅影”标记，获得两个蜀势力武将的技能！",
+  ["#joy__fuhan-choice"] = "扶汉：选择你要获得的至多2个技能",
+}
 
 
 
