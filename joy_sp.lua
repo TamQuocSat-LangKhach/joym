@@ -226,7 +226,115 @@ Fk:loadTranslationTable{
   [":joy__benghuai"] = "锁定技，结束阶段，若你不是体力值最低的角色，则你失去1点体力或减少1点体力上限，并摸一张牌。",
 }
 
+local joy__guanyinping = General(extension, "joy__guanyinping", "shu", 3, 3, General.Female)
+local joy__huxiao = fk.CreateTriggerSkill{
+  name = "joy__huxiao",
+  anim_type = "offensive",
+  events = {fk.Damage},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and player == target and data.damageType == fk.FireDamage and not data.to.dead
+  end,
+  on_use = function(self, event, target, player, data)
+    if data.to.dead then return end
+    local mark = U.getMark(data.to, "@@joy__huxiao-turn")
+    table.insertIfNeed(mark, player.id)
+    player.room:setPlayerMark(data.to, "@@joy__huxiao-turn", mark)
+  end,
+}
+local ol__huxiao_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__huxiao_targetmod",
+  bypass_times = function(self, player, skill, scope, card, to)
+    return table.contains(U.getMark(to, "@@joy__huxiao-turn"), player.id)
+  end,
+}
+joy__huxiao:addRelatedSkill(joy__huxiao_targetmod)
+local joy__wuji = fk.CreateTriggerSkill{
+  name = "joy__wuji",
+  anim_type = "special",
+  events = {fk.EventPhaseStart},
+  frequency = Skill.Wake,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.phase == Player.Finish and player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  can_wake = function(self, event, target, player, data)
+    local n = 0
+    U.getActualDamageEvents(player.room, 1, function(e)
+      local damage = e.data[1]
+      n = n + damage.damage
+      if n > 2 then return true end
+    end)
+    return n > 2
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:changeMaxHp(player, 1)
+    if player:isWounded() and not player.dead then
+      room:recover({ who = player, num = 1, recoverBy = player, skillName = self.name })
+    end
+    if player.dead then return end
+    for _, id in ipairs(Fk:getAllCardIds()) do
+      if Fk:getCardById(id).name == "blade" then
+        if room:getCardArea(id) == Card.DrawPile or room:getCardArea(id) == Card.DiscardPile or room:getCardArea(id) == Card.PlayerEquip then
+          room:moveCardTo(id, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+          break
+        end
+      end
+    end
+  end,
+}
+joy__guanyinping:addSkill("ol__xuehen")
+joy__guanyinping:addSkill(joy__huxiao)
+joy__guanyinping:addSkill(joy__wuji)
+Fk:loadTranslationTable{
+  ["joy__guanyinping"] = "关银屏",
+  ["#joy__guanyinping"] = "武姬",
 
+  ["joy__huxiao"] = "虎啸",
+  [":joy__huxiao"] = "锁定技，当你对一名角色造成火焰伤害后，本回合你对其使用牌无次数限制。",
+  ["@@joy__huxiao-turn"] = "虎啸",
+  ["joy__wuji"] = "武继",
+  [":joy__wuji"] = "觉醒技，结束阶段，若你本回合造成过至少3点伤害，你加1点体力上限并回复1点体力，，然后从牌堆、弃牌堆或场上获得【青龙偃月刀】。",
+}
+
+local joyex__sunqian = General(extension, "joyex__sunqian", "shu", 3)
+local joyex__qianya = fk.CreateTriggerSkill{
+  name = "joyex__qianya",
+  anim_type = "support",
+  events = {fk.TargetConfirmed},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.card.type == Card.TypeTrick and not player:isKongcheng()
+  end,
+  on_cost = function(self, event, target, player, data)
+    local tos, cards = player.room:askForChooseCardsAndPlayers(player, 1, player:getHandcardNum(), table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, ".", "#joyex__qianya-invoke", self.name, true)
+    if #tos > 0 and #cards > 0 then
+      self.cost_data = {tos[1], cards}
+      return true
+    end
+  end,
+  on_use = function (self, event, target, player, data)
+    player.room:moveCardTo(self.cost_data[2], Card.PlayerHand, player.room:getPlayerById(self.cost_data[1]), fk.ReasonGive, self.name, "", true, player.id)
+    local room = player.room
+    local cards = room:getCardsFromPileByRule(".|.|.|.|.|^Equip")
+    if #cards > 0 and not player.dead then
+      local get = cards[1]
+      local card = Fk:getCardById(get)
+      room:obtainCard(player, get, false, fk.ReasonDraw)
+    end
+  end,
+}
+
+joyex__sunqian:addSkill(joyex__qianya)
+joyex__sunqian:addSkill("shuimeng")
+Fk:loadTranslationTable{
+  ["joyex__sunqian"] = "界孙乾",
+  ["#joyex__sunqian"] = "折冲樽俎",
+
+  ["joyex__qianya"] = "谦雅",
+  [":joyex__qianya"] = "当你成为锦囊牌的目标后，你可以将任意张手牌交给一名其他角色,并从牌堆获得一张非装备牌。",
+  ["#joyex__qianya-invoke"] = "谦雅：你可以将任意张手牌交给一名其他角色并获得一张非装备牌",
+
+}
 
 local sunshangxiang = General(extension, "joysp__sunshangxiang", "shu", 3, 3, General.Female)
 local joy__liangzhu = fk.CreateTriggerSkill{
