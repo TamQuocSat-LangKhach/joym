@@ -1384,7 +1384,118 @@ Fk:loadTranslationTable{
   [":joy__kuangxi"] = "锁定技，每当你造成伤害时，若场上存在“卫”标记，此伤害+1。",
 }
 
+local godzhaoyun = General(extension, "joy__godzhaoyun", "god", 2)
+local juejing = fk.CreateTriggerSkill{
+  name = "joy__juejing",
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  events = {fk.EnterDying, fk.AfterDying},
+  on_use = function(self, event, target, player, data)
+    player:drawCards(1, self.name)
+  end,
+}
+local juejing_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__juejing_maxcards",
+  correct_func = function(self, player)
+    if player:hasSkill(juejing.name) then
+      return 3
+    end
+  end
+}
+juejing:addRelatedSkill(juejing_maxcards)
+local longhun = fk.CreateViewAsSkill{
+  name = "joy__longhun",
+  pattern = "peach,slash,jink,nullification",
+  card_filter = function(self, to_select, selected)
+    if #selected == 2 then
+      return false
+    elseif #selected == 1 then
+      return Fk:getCardById(to_select):compareSuitWith(Fk:getCardById(selected[1]))
+    else
+      local suit = Fk:getCardById(to_select).suit
+      local c
+      if suit == Card.Heart then
+        c = Fk:cloneCard("peach")
+      elseif suit == Card.Diamond then
+        c = Fk:cloneCard("fire__slash")
+      elseif suit == Card.Club then
+        c = Fk:cloneCard("jink")
+      elseif suit == Card.Spade then
+        c = Fk:cloneCard("nullification")
+      else
+        return false
+      end
+      return (Fk.currentResponsePattern == nil and c.skill:canUse(Self, c)) or (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(c))
+    end
+  end,
+  view_as = function(self, cards)
+    if #cards == 0 or #cards > 2 then
+      return nil
+    end
+    local suit = Fk:getCardById(cards[1]).suit
+    local c
+    if suit == Card.Heart then
+      c = Fk:cloneCard("peach")
+    elseif suit == Card.Diamond then
+      c = Fk:cloneCard("fire__slash")
+    elseif suit == Card.Club then
+      c = Fk:cloneCard("jink")
+    elseif suit == Card.Spade then
+      c = Fk:cloneCard("nullification")
+    else
+      return nil
+    end
+    c.skillName = self.name
+    c:addSubcards(cards)
+    return c
+  end,
+  before_use = function(self, player, use)
+    local num = #use.card.subcards
+    if num == 2 then
+      local suit = Fk:getCardById(use.card.subcards[1]).suit
+      if suit == Card.Diamond then
+        use.additionalDamage = (use.additionalDamage or 0) + 1
+        player:drawCards(1, self.name)
+      elseif suit == Card.Heart then
+        use.additionalRecover = (use.additionalRecover or 0) + 1
+        player:drawCards(1, self.name)
+      end
+    end
+  end,
+}
+local longhun_obtaincard = fk.CreateTriggerSkill{
+  name = "#joy__longhun_obtaincard",
+  events = {fk.CardUseFinished},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and table.contains(data.card.skillNames, "joy__longhun") and #data.card.subcards == 2 and Fk:getCardById(data.card.subcards[1]).color == Card.Black
+  end,
+  on_cost = function() return true end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local from = room.current
+      if from and not from.dead and not from:isNude() then
+        room:doIndicate(player.id, {from.id})
+        local card = room:askForCardChosen(player, from, "he", self.name)
+        room:obtainCard(player, card, false, fk.ReasonPrey)
+      end
+  end,
+}
+longhun:addRelatedSkill(longhun_obtaincard)
+godzhaoyun:addSkill(juejing)
+godzhaoyun:addSkill(longhun)
+Fk:loadTranslationTable{
+  ["joy__godzhaoyun"] = "神赵云",
+  ["#joy__godzhaoyun"] = "神威如龙",
 
+  ["joy__juejing"] = "绝境",
+  [":joy__juejing"] = "锁定技，你的手牌上限+3；当你进入濒死状态时或你的濒死结算结束后，你摸一张牌。",
+  ["joy__longhun"] = "龙魂",
+  ["#joy__longhun_obtaincard"] = "龙魂",
+  [":joy__longhun"] = "你可以将至多两张你的同花色的牌按以下规则使用或打出：红桃当【桃】，方块当火【杀】，梅花当【闪】，黑桃当【无懈可击】。"..
+  "若你以此法使用或打出了两张：红色牌，此牌回复伤害基数+1，且你摸一张牌；黑色牌，你获得当前回合角色一张牌。",
+
+}
 
 
 
