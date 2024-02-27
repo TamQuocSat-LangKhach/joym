@@ -977,5 +977,62 @@ Fk:loadTranslationTable{
 
 }
 
+local caiwenji = General(extension, "joysp__caiwenji", "wei", 3, 3, General.Female)
+local chenqing = fk.CreateTriggerSkill{
+  name = "joy__chenqing",
+  anim_type = "support",
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and
+    not table.every(player.room.alive_players, function (p)
+      return p == player or p == target
+    end)
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local targets = {}
+    for _, p in ipairs(room.alive_players) do
+      if p ~= target then
+        table.insert(targets, p.id)
+      end
+    end
+    if #targets == 0 then return end
+    local to = room:askForChoosePlayers(player, targets, 1, 1, "#joy__chenqing-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data)
+    to:drawCards(5, self.name)
+    local cards = room:askForDiscard(to, 4, 4, true, self.name, false, ".", "#joy__chenqing-discard", true)
+    local suits = {}
+    for _, id in ipairs(cards) do
+      if Fk:getCardById(id).suit ~= Card.NoSuit then
+        table.insertIfNeed(suits, Fk:getCardById(id).suit)
+      end
+    end
+    room:throwCard(cards, self.name, to, to)
+    if #suits == 4 and not to.dead and not target.dead then
+      room:useVirtualCard("peach", nil, to, target, self.name)
+    end
+  end,
+}
+
+caiwenji:addSkill(chenqing)
+caiwenji:addSkill("mozhi")
+Fk:loadTranslationTable{
+  ["joysp__caiwenji"] = "蔡文姬",
+  ["#joysp__caiwenji"] = "金璧之才",
+
+  ["joy__chenqing"] = "陈情",
+  [":joy__chenqing"] = "每回合限一次，当一名角色进入濒死状态时，你可以令另一名角色摸五张牌，然后弃置四张牌，"..
+  "若其以此法弃置的四张牌的花色各不相同，则其视为对濒死状态的角色使用一张【桃】。",
+
+  ["#joy__chenqing-choose"] = "陈情：令一名角色摸五张牌然后弃四张牌，若花色各不相同视为对濒死角色使用【桃】",
+  ["#joy__chenqing-discard"] = "陈情：需弃置四张牌，若花色各不相同则视为对濒死角色使用【桃】",
+}
 
 return extension
