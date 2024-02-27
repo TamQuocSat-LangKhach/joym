@@ -336,6 +336,75 @@ Fk:loadTranslationTable{
 
 }
 
+local xizhicai = General(extension, "joy__xizhicai", "wei", 3)
+local updataXianfu = function (room, player, target)
+  local mark = U.getMark(player, "xianfu")
+  table.insertIfNeed(mark[2], target.id)
+  room:setPlayerMark(player, "xianfu", mark)
+  local names = table.map(mark[2], function(pid) return Fk:translate(room:getPlayerById(pid).general) end)
+  room:setPlayerMark(player, "@xianfu", table.concat(names, ","))
+end
+local chouce = fk.CreateTriggerSkill{
+  name = "joy__chouce",
+  anim_type = "masochism",
+  events = {fk.Damaged},
+  on_trigger = function(self, event, target, player, data)
+    self.cancel_cost = false
+    for i = 1, data.damage do
+      if self.cancel_cost or not player:hasSkill(self) then break end
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    if player.room:askForSkillInvoke(player, self.name, data) then
+      return true
+    end
+    self.cancel_cost = true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local judge = {
+      who = player,
+      reason = self.name,
+      pattern = ".|.|^nosuit",
+    }
+    room:judge(judge)
+    if judge.card.color == Card.Red then
+      local targets = table.map(room.alive_players, Util.IdMapper)
+      local tos = room:askForChoosePlayers(player, targets, 1, 1, "#joy__chouce-draw", self.name, false)
+      local to = room:getPlayerById(tos[1])
+      local num = 1
+      local mark = U.getMark(player, "xianfu")
+      if #mark > 0 and table.contains(mark[1], to.id) then
+        num = 2
+        updataXianfu (room, player, to)
+      end
+      to:drawCards(num, self.name)
+    elseif judge.card.color == Card.Black then
+      local targets = table.map(table.filter(room.alive_players, function(p) return not p:isAllNude() end), Util.IdMapper)
+      if #targets == 0 then return end
+      local tos = room:askForChoosePlayers(player, targets, 1, 1, "#joy__chouce-discard", self.name, false)
+      local to = room:getPlayerById(tos[1])
+      local card = room:askForCardChosen(player, to, "hej", self.name)
+      room:obtainCard(player,card,false, fk.ReasonPrey)
+    end
+  end,
+}
+xizhicai:addSkill("xianfu")
+xizhicai:addSkill("tiandu")
+xizhicai:addSkill(chouce)
+Fk:loadTranslationTable{
+  ["joy__xizhicai"] = "戏志才",
+  ["#joy__xizhicai"] = "负俗的天才",
+
+  ["joy__chouce"] = "筹策",
+  [":joy__chouce"] = "当你受到1点伤害后，你可以进行判定，若结果为：黑色，你获得一名角色区域里的一张牌；红色，你令一名角色摸一张牌（先辅的角色摸两张）。",
+
+  ["#joy__chouce-draw"] = "筹策: 令一名角色摸一张牌（若为先辅角色则摸两张）",
+  ["#joy__chouce-discard"] = "筹策: 获得一名角色区域里的一张牌",
+
+}
+
 local sunshangxiang = General(extension, "joysp__sunshangxiang", "shu", 3, 3, General.Female)
 local joy__liangzhu = fk.CreateTriggerSkill{
   name = "joy__liangzhu",
