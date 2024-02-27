@@ -1676,7 +1676,120 @@ Fk:loadTranslationTable{
   ["#joy__gn_jieying-choose"] = "劫营：你可将营标记交给其他角色",
 }
 
+local godguanyu = General(extension, "joy__godguanyu", "god", 5)
+local joy__wushen = fk.CreateViewAsSkill{
+  name = "joy__wushen",
+  anim_type = "offensive",
+  pattern = "slash",
+  card_filter = function(self, to_select, selected)
+    if #selected == 1 then return false end
+    return Fk:getCardById(to_select).suit == Card.Heart
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then
+      return nil
+    end
+    local c = Fk:cloneCard("slash")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+}
+local wushen_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__wushen_targetmod",
+  anim_type = "offensive",
+  distance_limit_func =  function(self, player, skill, card)
+    if player:hasSkill("joy__wushen") and skill.trueName == "slash_skill" and card.suit == Card.Heart then
+      return 999
+    end
+    return 0
+  end,
+}
+local wushen_trigger = fk.CreateTriggerSkill{
+  name = "#joy__wushen_trigger",
+  main_skill = joy__wushen,
+  mute = true,
+  events = {fk.AfterCardUseDeclared},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      return  data.card.trueName == "slash" and data.card.suit == Card.Heart
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+      room:notifySkillInvoked(player, "joy__wushen", "offensive")
+      data.additionalDamage = (data.additionalDamage or 0) + 1
+  end,
+}
+local wuhun = fk.CreateTriggerSkill{
+  name = "joy__wuhun",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {fk.Damaged,fk.AfterDying, fk.Death},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self, false, true) then
+      if event == fk.Damaged then
+        return data.from and not data.from.dead and not player.dead
+      else
+        local availableTargets = {}
+        local n = 0
+        for _, p in ipairs(player.room.alive_players) do
+          if p:getMark("@joy__nightmare") > n then
+            availableTargets = {}
+            table.insert(availableTargets, p.id)
+            n = p:getMark("@joy__nightmare")
+          elseif p:getMark("@joy__nightmare") == n and n ~= 0 then
+            table.insert(availableTargets, p.id)
+          end
+        end
+        if #availableTargets > 0 then
+          self.cost_data = availableTargets
+          return true
+        end
+      end
+    end
+    return false
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.Damaged then
+      room:addPlayerMark(data.from, "@joy__nightmare", data.damage)
+    else
+      local p_id
+      if #self.cost_data > 1 then
+        p_id = room:askForChoosePlayers(player, self.cost_data, 1, 1, "#joy__wuhun-choose", self.name, false)[1]
+      else
+        p_id = self.cost_data[1]
+      end
+      local judge = {
+        who = room:getPlayerById(p_id),
+        reason = self.name,
+        pattern = "peach,god_salvation|.",
+      }
+      room:judge(judge)
+      if judge.card.name == "peach" or judge.card.name == "god_salvation" then return false end
+      local p = room:getPlayerById(p_id)
+      room:loseHp(p,5,self.name)
+    end
+  end,
+}
+joy__wushen:addRelatedSkill(wushen_targetmod)
+joy__wushen:addRelatedSkill(wushen_trigger)
+godguanyu:addSkill(joy__wushen)
+godguanyu:addSkill(wuhun)
+Fk:loadTranslationTable {
+  ["joy__godguanyu"] = "神关羽",
+  ["#joy__godguanyu"] = "神鬼再临",
 
+  ["joy__wushen"] = "武神",
+  [":joy__wushen"] = "你的<font color='red'>♥</font>手牌可以视为【杀】；你使用<font color='red'>♥</font>【杀】无距离限制且伤害+1。",
+  ["joy__wuhun"] = "武魂",
+  [":joy__wuhun"] = "锁定技，当你受到1点伤害后，伤害来源获得1枚“梦魇”；你脱离濒死状态或死亡时，令“梦魇”最多的一名其他角色判定，若不为【桃】或【桃园结义】，该角色流失5点体力。",
+  ["@joy__nightmare"] = "梦魇",
+  ["#joy__wuhun-choose"] = "武魂：选择一名“梦魇”最多的其他角色",
+
+}
 
 
 
