@@ -610,4 +610,96 @@ Fk:loadTranslationTable{
   ["joy__lingren_delay"] = "凌人",
 }
 
+local baosanniang = General(extension, "joy__baosanniang", "shu", 3, 3, General.Female)
+local joy__wuniang = fk.CreateTriggerSkill{
+  name = "joy__wuniang",
+  anim_type = "control",
+  events = {fk.CardUsing, fk.CardResponding},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.card.trueName == "slash" and
+      not table.every(player.room:getOtherPlayers(player), function(p) return p:isNude() end)
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local prompt = "#joy__wuniang1-choose"
+    if player:usedSkillTimes("joy__xushen", Player.HistoryGame) > 0 and
+      table.find(room.alive_players, function(p) return string.find(p.general, "guansuo") end) then
+      prompt = "#joy__wuniang2-choose"
+    end
+    local to = room:askForChoosePlayers(player, table.map(table.filter(room:getOtherPlayers(player), function(p)
+      return not p:isNude() end), Util.IdMapper), 1, 1, prompt, self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, player, target, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data)
+    local id = room:askForCardChosen(player, to, "he", self.name)
+    room:obtainCard(player.id, id, false, fk.ReasonPrey)
+    if not to.dead then
+      to:drawCards(1, self.name)
+    end
+    if player:usedSkillTimes("joy__xushen", Player.HistoryGame) > 0 then
+      for _, p in ipairs(room.alive_players) do
+        if string.find(p.general, "guansuo") and not p.dead then
+          p:drawCards(1, self.name)
+        end
+      end
+    end
+  end,
+}
+local joy__xushen = fk.CreateTriggerSkill{
+  name = "joy__xushen",
+  anim_type = "defensive",
+  frequency = Skill.Limited,
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.dying and player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:recover({
+      who = player,
+      num = 1,
+      recoverBy = player,
+      skillName = self.name
+    })
+    room:handleAddLoseSkills(player, "ty__zhennan", nil, true, false)
+    if player.dead or table.find(room.alive_players, function(p) return string.find(p.general, "guansuo") end) then return end
+    local targets = table.map(room:getOtherPlayers(player), Util.IdMapper)
+    local to = room:askForChoosePlayers(player, targets, 1, 1, "#joy__xushen-choose", self.name, true)
+    if #to > 0 then
+      to = room:getPlayerById(to[1])
+      if room:askForSkillInvoke(to, self.name, nil, "#joy__xushen-invoke") then
+        room:changeHero(to, "joy__guansuo", false, false, true)
+      end
+      if not to.dead then
+        to:drawCards(3, self.name)
+      end
+    end
+  end,
+}
+
+baosanniang:addSkill(joy__wuniang)
+baosanniang:addSkill(joy__xushen)
+baosanniang:addRelatedSkill("ty__zhennan")
+Fk:loadTranslationTable{
+  ["joy__baosanniang"] = "鲍三娘",
+  ["#joy__baosanniang"] = "南中武娘",
+
+  ["joy__wuniang"] = "武娘",
+  [":joy__wuniang"] = "当你使用或打出【杀】时，你可以获得一名其他角色的一张牌，若如此做，其摸一张牌。若你已发动〖许身〗，则关索也摸一张牌。",
+  ["joy__xushen"] = "许身",
+  [":joy__xushen"] = "限定技，当你进入濒死状态后，你可以回复1点体力并获得技能〖镇南〗，然后如果你脱离濒死状态且关索不在场，"..
+  "你可令一名其他角色选择是否用关索代替其武将并令其摸三张牌",
+  ["joy__zhennan"] = "镇南",
+  [":joy__zhennan"] = "当有角色使用普通锦囊牌指定目标后，若此牌目标数大于1，你可以对一名其他角色造成1点伤害。",
+  ["#joy__wuniang1-choose"] = "武娘：你可以获得一名其他角色的一张牌，其摸一张牌",
+  ["#joy__wuniang2-choose"] = "武娘：你可以获得一名其他角色的一张牌，其摸一张牌，关索摸一张牌",
+  ["#joy__xushen-choose"] = "许身：你可以令一名其他角色摸三张牌并选择是否变身为欢乐杀关索！",
+  ["#joy__xushen-invoke"]= "许身：你可以变身为欢乐杀关索！",
+  
+}
 return extension
