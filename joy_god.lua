@@ -1497,7 +1497,184 @@ Fk:loadTranslationTable{
 
 }
 
+local godganning = General(extension, "joy__godganning", "god", 3, 6)
+local poxi = fk.CreateActiveSkill{
+  name = "joy__poxi",
+  anim_type = "control",
+  prompt = "#joy__poxi-prompt",
+  card_num = 0,
+  target_num = 1,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) < 1
+  end,
+  card_filter = function() return false end,
+  target_filter = function(self, to_select, selected, selected_cards)
+    return #selected == 0 and to_select ~= Self.id and not Fk:currentRoom():getPlayerById(to_select):isKongcheng()
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local player_hands = player:getCardIds("h")
+    local target_hands = target:getCardIds("h")
+    local cards = room:askForPoxi(player, "joy__poxi_discard", {
+      { player.general, player_hands },
+      { target.general, target_hands },
+    }, nil, true)
+    if #cards == 0 then return end
+    local cards1 = table.filter(cards, function(id) return table.contains(player_hands, id) end)
+    local cards2 = table.filter(cards, function(id) return table.contains(target_hands, id) end)
+    local moveInfos = {}
+    if #cards1 > 0 then
+      table.insert(moveInfos, {
+        from = player.id,
+        ids = cards1,
+        toArea = Card.DiscardPile,
+        moveReason = fk.ReasonDiscard,
+        proposer = effect.from,
+        skillName = self.name,
+      })
+    end
+    if #cards2 > 0 then
+      table.insert(moveInfos, {
+        from = target.id,
+        ids = cards2,
+        toArea = Card.DiscardPile,
+        moveReason = fk.ReasonDiscard,
+        proposer = effect.from,
+        skillName = self.name,
+      })
+    end
+    room:moveCards(table.unpack(moveInfos))
+    if player.dead then return false end
+    if #cards1 == 0 then
+      room:changeMaxHp(player, -1)
+    elseif #cards1 == 2 and player:isWounded() then
+      room:recover({
+        who = player,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name
+      })
+    elseif #cards1 == 3 then
+      room:drawCards(player, 3, self.name)
+    end
+    return false
+  end,
+}
+Fk:addPoxiMethod{
+  name = "joy__poxi_discard",
+  card_filter = function(to_select, selected, data)
+    local suit = Fk:getCardById(to_select).suit
+    if suit == Card.NoSuit then return false end
+    return not table.find(selected, function(id) return Fk:getCardById(id).suit == suit end)
+    and not (Self:prohibitDiscard(Fk:getCardById(to_select)) and table.contains(data[1][2], to_select))
+  end,
+  feasible = function(selected)
+    return #selected == 3
+  end,
+  prompt = function ()
+    return "魄袭：弃置双方手里三张不同花色的牌"
+  end
+}
+local gn_jieying = fk.CreateTriggerSkill{
+  name = "joy__gn_jieying",
+  anim_type = "drawcard",
+  events = {fk.DrawNCards, fk.EventPhaseStart, fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.TurnStart then
+      return player == target and table.every(player.room.alive_players, function (p)
+        return p:getMark("@@joy__jieying_camp") == 0 end)
+    elseif event == fk.EventPhaseStart and target.phase ~= Player.Finish then
+      return false
+    end
+    return target:getMark("@@joy__jieying_camp") > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    if event == fk.EventPhaseStart and player == target then
+      local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
+        return p.id end), 1, 1, "#joy__gn_jieying-choose", self.name, true)
+      if #to > 0 then
+        self.cost_data = to[1]
+        return true
+      end
+      return false
+    end
+    return true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      room:addPlayerMark(player, "@@joy__jieying_camp")
+    elseif event == fk.DrawNCards then
+      data.n = data.n + 1
+    elseif event == fk.EventPhaseStart then
+      if player == target then
+        local tar = room:getPlayerById(self.cost_data)
+        room:setPlayerMark(player, "@@joy__jieying_camp", 0)
+        room:addPlayerMark(tar, "@@joy__jieying_camp")
+      else
+        room:setPlayerMark(target, "@@joy__jieying_camp", 0)
+        if not target:isKongcheng() then
+          local dummy = Fk:cloneCard("dilu")
+          dummy:addSubcards(target.player_cards[Player.Hand])
+          room:obtainCard(player.id, dummy, false, fk.ReasonPrey)
+        end
+      end
+    end
+    return false
+  end,
 
+  refresh_events = {fk.BuryVictim, fk.EventLoseSkill},
+  can_refresh = function(self, event, target, player, data)
+    return (event == fk.BuryVictim or data == self) and player:getMark("@@joy__jieying_camp") > 0
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    if table.every(room.alive_players, function (p) return not p:hasSkill(self.name, true) end) then
+      room:setPlayerMark(player, "@@joy__jieying_camp", 0)
+    end
+  end,
+}
+local gn_jieying_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__gn_jieying_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:getMark("@@joy__jieying_camp") > 0 and scope == Player.HistoryPhase then
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+    end
+  end,
+}
+local gn_jieying_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__gn_jieying_maxcards",
+  correct_func = function(self, player)
+    if player:getMark("@@joy__jieying_camp") > 0 then
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+    else
+      return 0
+    end
+  end,
+}
+gn_jieying:addRelatedSkill(gn_jieying_targetmod)
+gn_jieying:addRelatedSkill(gn_jieying_maxcards)
+godganning:addSkill(poxi)
+godganning:addSkill(gn_jieying)
+Fk:loadTranslationTable{
+  ["joy__godganning"] = "神甘宁",
+  ["#joy__godganning"] = "江表之力牧",
+
+  ["joy__poxi"] = "魄袭",
+  [":joy__poxi"] = "出牌阶段限一次，你可以观看一名其他角色的手牌，然后你可以弃置你与其手里共计三张不同花色的牌。若如此做，根据此次弃置你的牌数量执行以下效果：没有，体力上限减1；两张，回复1点体力；三张，摸三张牌。",
+  ["joy__gn_jieying"] = "劫营",
+  [":joy__gn_jieying"] = "回合开始时，若没有角色有“营”标记，你获得一个“营”标记；结束阶段你可以将“营”标记交给一名其他角色；"..
+  "有“营”的角色摸牌阶段多摸一张牌、使用【杀】的次数上限+1、手牌上限+1。有“营”的其他角色的结束阶段，移去“营”，然后你获得其所有手牌。",
+  --欢杀劫营其他角色回合结束只移去“营”而不是转移到神甘宁头上（虽然没什么区别..)
+
+  ["joy__poxi_discard"] = "魄袭",
+  ["#joy__poxi-prompt"] = "魄袭：选择一名有手牌的其他角色，并可弃置你与其手牌中共计三张花色各不相同的牌",
+  ["@@joy__jieying_camp"] = "营",
+  ["#joy__poxi-choose"] = "魄袭：从双方的手牌中选出四张不同花色的牌弃置，或者点取消",
+  ["#joy__gn_jieying-choose"] = "劫营：你可将营标记交给其他角色",
+}
 
 
 
