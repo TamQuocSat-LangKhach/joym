@@ -1791,7 +1791,98 @@ Fk:loadTranslationTable {
 
 }
 
+local godzhouyu = General(extension, "joy__godzhouyu", "god", 4)
+local qinyin = fk.CreateTriggerSkill{
+  name = "joy__qinyin",
+  events = {fk.EventPhaseEnd},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) and player.phase == Player.Discard then
+      local x = 0
+      local logic = player.room.logic
+      logic:getEventsOfScope(GameEvent.MoveCards, 1, function (e)
+        for _, move in ipairs(e.data) do
+          if move.from == player.id and move.moveReason == fk.ReasonDiscard and move.skillName == "game_rule" then
+            x = x + #move.moveInfo
+            if x > 0 then return true end
+          end
+        end
+        return false
+      end, Player.HistoryTurn)
+      return x > 0
+    end
+  end,
+  
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local choices = {"loseHp","drawcard"}
+    if not table.every(room.alive_players, function (p) return not p:isWounded() end) then
+      table.insert(choices, 1, "recover")
+    end
+    local choice = room:askForChoice(player, choices, self.name)
+    if choice == "recover" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if p:isWounded() then
+          room:recover{
+            who = p,
+            num = 1,
+            recoverBy = player,
+            skillName = self.name
+          }
+        end
+      end
+    elseif choice == "loseHp" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if not p.dead then room:loseHp(p, 1, self.name) end
+      end
+    elseif choice == "drawcard" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if not p.dead then room:drawCards(p, 1, self.name) end
+      end
+    end
+  end,
+}
+local yeyan = fk.CreateTriggerSkill{
+  name = "joy__yeyan",
+  anim_type = "offensive",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      player.phase == Player.Start 
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player),  Util.IdMapper), 1, 1, "#joy__yeyan-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:damage({
+      from = player,
+      to = room:getPlayerById(self.cost_data),
+      damage = 1,
+      damageType = fk.FireDamage,
+      skillName = self.name,
+    })
+  end,
+}
+godzhouyu:addSkill(qinyin)
+godzhouyu:addSkill(yeyan)
+Fk:loadTranslationTable{
+  ["joy__godzhouyu"] = "神周瑜",
+  ["#joy__godzhouyu"] = "赤壁的火神",
 
+  ["joy__qinyin"] = "琴音",
+  [":joy__qinyin"] = "弃牌阶段结束时，若你此阶段弃置过至少一张手牌，你可以选择：1. 令所有角色各回复1点体力；2. 令所有角色各失去1点体力。3.令所有角色各摸一张牌",
+  ["joy__yeyan"] = "业炎",
+  [":joy__yeyan"] = "出牌阶段开始时，你可以选择一名其他角色对其造成1点火焰伤害。",
+  ["#joy__yeyan-choose"] = "业炎：选择1名其他角色对其造成1点火焰伤害",
+
+  ["drawcard"] = "各摸一张牌"
+}
 
 
 
