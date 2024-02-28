@@ -889,16 +889,20 @@ local joy__pinting_delay = fk.CreateTriggerSkill{
         return e.data[1].from == player.id
       end, Player.HistoryPhase)
       if event == fk.CardUseFinished then
-        if string.find(mark, "3") and events[3] and events[3].data[1] == data and player.room:getCardArea(data.card) == Card.Processing then
+        if string.find(mark, "3") and events[3] and events[3].data[1] == data then
           self.cost_data = 3
           return true
         end
       else
-        for _, i in ipairs({2,4}) do
-          if string.find(mark, tostring(i)) and events[i] and events[i].data[1] == data then
-            self.cost_data = i
+        if string.find(mark, "2") and events[2] and events[2].data[1] == data then
+          local place = player.room:getCardArea(data.card)
+          if place == Card.Processing or place == Card.PlayerEquip or place == Card.PlayerJudge then
+            self.cost_data = 2
             return true
           end
+        elseif string.find(mark, "4") and events[4] and events[4].data[1] == data then
+          self.cost_data = 4
+          return true
         end
       end
     end
@@ -1397,7 +1401,7 @@ local juejing = fk.CreateTriggerSkill{
 local juejing_maxcards = fk.CreateMaxCardsSkill{
   name = "#joy__juejing_maxcards",
   correct_func = function(self, player)
-    if player:hasSkill(juejing.name) then
+    if player:hasSkill(juejing) then
       return 3
     end
   end
@@ -1464,11 +1468,11 @@ local longhun = fk.CreateViewAsSkill{
   end,
 }
 local longhun_obtaincard = fk.CreateTriggerSkill{
-  name = "#joy__longhun_obtaincard",
+  name = "#joy__longhun_delay",
   events = {fk.CardUseFinished},
   mute = true,
   can_trigger = function(self, event, target, player, data)
-    return target == player and table.contains(data.card.skillNames, "joy__longhun") and #data.card.subcards == 2 and Fk:getCardById(data.card.subcards[1]).color == Card.Black
+    return target == player and table.contains(data.card.skillNames, "joy__longhun") and #data.card.subcards == 2 and Fk:getCardById(data.card.subcards[1]).color == Card.Black and not player.dead
   end,
   on_cost = function() return true end,
   on_use = function(self, event, target, player, data)
@@ -1491,10 +1495,9 @@ Fk:loadTranslationTable{
   ["joy__juejing"] = "绝境",
   [":joy__juejing"] = "锁定技，你的手牌上限+3；当你进入濒死状态时或你的濒死结算结束后，你摸一张牌。",
   ["joy__longhun"] = "龙魂",
-  ["#joy__longhun_obtaincard"] = "龙魂",
+  ["#joy__longhun_delay"] = "龙魂",
   [":joy__longhun"] = "你可以将至多两张你的同花色的牌按以下规则使用或打出：红桃当【桃】，方块当火【杀】，梅花当【闪】，黑桃当【无懈可击】。"..
   "若你以此法使用或打出了两张：红色牌，此牌回复伤害基数+1，且你摸一张牌；黑色牌，你获得当前回合角色一张牌。",
-
 }
 
 local godganning = General(extension, "joy__godganning", "god", 3, 6)
@@ -1698,11 +1701,8 @@ local joy__wushen = fk.CreateViewAsSkill{
 local wushen_targetmod = fk.CreateTargetModSkill{
   name = "#joy__wushen_targetmod",
   anim_type = "offensive",
-  distance_limit_func =  function(self, player, skill, card)
-    if player:hasSkill("joy__wushen") and skill.trueName == "slash_skill" and card.suit == Card.Heart then
-      return 999
-    end
-    return 0
+  bypass_distances = function(self, player, skill, card)
+    return player:hasSkill(joy__wushen) and skill.trueName == "slash_skill" and card.suit == Card.Heart
   end,
 }
 local wushen_trigger = fk.CreateTriggerSkill{
@@ -1783,12 +1783,11 @@ Fk:loadTranslationTable {
   ["#joy__godguanyu"] = "神鬼再临",
 
   ["joy__wushen"] = "武神",
-  [":joy__wushen"] = "你的<font color='red'>♥</font>手牌可以视为【杀】；你使用<font color='red'>♥</font>【杀】无距离限制且伤害+1。",
+  [":joy__wushen"] = "你的<font color='red'>♥</font>手牌可以当【杀】使用或打出；你使用<font color='red'>♥</font>【杀】无距离限制且伤害+1。",
   ["joy__wuhun"] = "武魂",
   [":joy__wuhun"] = "锁定技，当你受到1点伤害后，伤害来源获得1枚“梦魇”；你脱离濒死状态或死亡时，令“梦魇”最多的一名其他角色判定，若不为【桃】或【桃园结义】，该角色流失5点体力。",
   ["@joy__nightmare"] = "梦魇",
   ["#joy__wuhun-choose"] = "武魂：选择一名“梦魇”最多的其他角色",
-
 }
 
 local godzhouyu = General(extension, "joy__godzhouyu", "god", 4)

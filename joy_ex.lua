@@ -348,7 +348,7 @@ local wusheng_trigger = fk.CreateTriggerSkill{
     local room = player.room
     if event == fk.TurnStart then
       room:notifySkillInvoked(player, "joyex__wusheng", "drawcard")
-      local ids = room:getCardsFromPileByRule("slash|.|heart,diamond", 1, "allPiles")
+      local ids = room:getCardsFromPileByRule(".|.|heart,diamond", 1, "allPiles")
       if #ids > 0 then
         room:obtainCard(player, ids[1], false, fk.ReasonPrey)
       end
