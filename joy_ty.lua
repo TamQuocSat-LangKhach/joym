@@ -849,4 +849,42 @@ Fk:loadTranslationTable{
   ["joy__zhenyi_heart"] = "将判定结果改为<font color='red'>♥</font>5",
 }
 
+local joy__sunru = General(extension, "joy__sunru", "wu", 3, 3, General.Female)
+local joy__xiecui = fk.CreateTriggerSkill{
+  name = "joy__xiecui",
+  anim_type = "offensive",
+  events = {fk.DamageCaused},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and data.from and not data.from.dead and data.from.phase ~= Player.NotActive and data.card then
+      if data.from:getMark("joy__xiecui-turn") == 0 then
+        player.room:addPlayerMark(data.from, "joy__xiecui-turn", 1)
+        return true
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, data, "#joy__xiecui-invoke:"..data.from.id..":"..data.to.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    data.damage = data.damage + 1
+    if  target:getHandcardNum() > target.hp and room:getCardArea(data.card) == Card.Processing then
+      room:obtainCard(data.from, data.card, false)
+      room:addPlayerMark(data.from, MarkEnum.AddMaxCardsInTurn, 1)
+    end
+  end,
+}
+
+joy__sunru:addSkill(joy__xiecui)
+joy__sunru:addSkill("youxu")
+Fk:loadTranslationTable{
+  ["joy__sunru"] = "孙茹",
+  ["#joy__sunru"] = "呦呦鹿鸣",
+
+  ["joy__xiecui"] = "撷翠",
+  [":joy__xiecui"] = "有角色在自己回合内使用牌首次造成伤害时，你可令此伤害+1。若该角色手牌数大于等于体力值，其获得此伤害牌且本回合手牌上限+1。",
+  ["#joy__xiecui-invoke"] = "撷翠：你可以令 %src 对 %dest造成的伤害+1",
+
+}
+
 return extension
