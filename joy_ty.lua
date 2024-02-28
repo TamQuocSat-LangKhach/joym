@@ -855,11 +855,9 @@ local joy__xiecui = fk.CreateTriggerSkill{
   anim_type = "offensive",
   events = {fk.DamageCaused},
   can_trigger = function(self, event, target, player, data)
-    if player:hasSkill(self) and data.from and not data.from.dead and data.from.phase ~= Player.NotActive and data.card then
-      if data.from:getMark("joy__xiecui-turn") == 0 then
-        player.room:addPlayerMark(data.from, "joy__xiecui-turn", 1)
-        return true
-      end
+    if player:hasSkill(self) and target and not target.dead and target == player.room.current and data.card then
+      return player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and
+      #U.getActualDamageEvents(player.room, 1, function(e) return e.data[1].from == target end) == 0
     end
   end,
   on_cost = function(self, event, target, player, data)
@@ -868,13 +866,12 @@ local joy__xiecui = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     data.damage = data.damage + 1
-    if  target:getHandcardNum() > target.hp and room:getCardArea(data.card) == Card.Processing then
-      room:obtainCard(data.from, data.card, false)
-      room:addPlayerMark(data.from, MarkEnum.AddMaxCardsInTurn, 1)
+    if not target.dead and target:getHandcardNum() > target.hp and room:getCardArea(data.card) == Card.Processing then
+      room:addPlayerMark(target, MarkEnum.AddMaxCardsInTurn, 1)
+      room:moveCardTo(data.card, Card.PlayerHand, target, fk.ReasonPrey, self.name)
     end
   end,
 }
-
 joy__sunru:addSkill(joy__xiecui)
 joy__sunru:addSkill("youxu")
 Fk:loadTranslationTable{
