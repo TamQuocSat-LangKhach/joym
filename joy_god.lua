@@ -1384,13 +1384,505 @@ Fk:loadTranslationTable{
   [":joy__kuangxi"] = "锁定技，每当你造成伤害时，若场上存在“卫”标记，此伤害+1。",
 }
 
+local godzhaoyun = General(extension, "joy__godzhaoyun", "god", 2)
+local juejing = fk.CreateTriggerSkill{
+  name = "joy__juejing",
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  events = {fk.EnterDying, fk.AfterDying},
+  on_use = function(self, event, target, player, data)
+    player:drawCards(1, self.name)
+  end,
+}
+local juejing_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__juejing_maxcards",
+  correct_func = function(self, player)
+    if player:hasSkill(juejing.name) then
+      return 3
+    end
+  end
+}
+juejing:addRelatedSkill(juejing_maxcards)
+local longhun = fk.CreateViewAsSkill{
+  name = "joy__longhun",
+  pattern = "peach,slash,jink,nullification",
+  card_filter = function(self, to_select, selected)
+    if #selected == 2 then
+      return false
+    elseif #selected == 1 then
+      return Fk:getCardById(to_select):compareSuitWith(Fk:getCardById(selected[1]))
+    else
+      local suit = Fk:getCardById(to_select).suit
+      local c
+      if suit == Card.Heart then
+        c = Fk:cloneCard("peach")
+      elseif suit == Card.Diamond then
+        c = Fk:cloneCard("fire__slash")
+      elseif suit == Card.Club then
+        c = Fk:cloneCard("jink")
+      elseif suit == Card.Spade then
+        c = Fk:cloneCard("nullification")
+      else
+        return false
+      end
+      return (Fk.currentResponsePattern == nil and c.skill:canUse(Self, c)) or (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(c))
+    end
+  end,
+  view_as = function(self, cards)
+    if #cards == 0 or #cards > 2 then
+      return nil
+    end
+    local suit = Fk:getCardById(cards[1]).suit
+    local c
+    if suit == Card.Heart then
+      c = Fk:cloneCard("peach")
+    elseif suit == Card.Diamond then
+      c = Fk:cloneCard("fire__slash")
+    elseif suit == Card.Club then
+      c = Fk:cloneCard("jink")
+    elseif suit == Card.Spade then
+      c = Fk:cloneCard("nullification")
+    else
+      return nil
+    end
+    c.skillName = self.name
+    c:addSubcards(cards)
+    return c
+  end,
+  before_use = function(self, player, use)
+    local num = #use.card.subcards
+    if num == 2 then
+      local suit = Fk:getCardById(use.card.subcards[1]).suit
+      if suit == Card.Diamond then
+        use.additionalDamage = (use.additionalDamage or 0) + 1
+        player:drawCards(1, self.name)
+      elseif suit == Card.Heart then
+        use.additionalRecover = (use.additionalRecover or 0) + 1
+        player:drawCards(1, self.name)
+      end
+    end
+  end,
+}
+local longhun_obtaincard = fk.CreateTriggerSkill{
+  name = "#joy__longhun_obtaincard",
+  events = {fk.CardUseFinished},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and table.contains(data.card.skillNames, "joy__longhun") and #data.card.subcards == 2 and Fk:getCardById(data.card.subcards[1]).color == Card.Black
+  end,
+  on_cost = function() return true end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local from = room.current
+      if from and not from.dead and not from:isNude() then
+        room:doIndicate(player.id, {from.id})
+        local card = room:askForCardChosen(player, from, "he", self.name)
+        room:obtainCard(player, card, false, fk.ReasonPrey)
+      end
+  end,
+}
+longhun:addRelatedSkill(longhun_obtaincard)
+godzhaoyun:addSkill(juejing)
+godzhaoyun:addSkill(longhun)
+Fk:loadTranslationTable{
+  ["joy__godzhaoyun"] = "神赵云",
+  ["#joy__godzhaoyun"] = "神威如龙",
 
+  ["joy__juejing"] = "绝境",
+  [":joy__juejing"] = "锁定技，你的手牌上限+3；当你进入濒死状态时或你的濒死结算结束后，你摸一张牌。",
+  ["joy__longhun"] = "龙魂",
+  ["#joy__longhun_obtaincard"] = "龙魂",
+  [":joy__longhun"] = "你可以将至多两张你的同花色的牌按以下规则使用或打出：红桃当【桃】，方块当火【杀】，梅花当【闪】，黑桃当【无懈可击】。"..
+  "若你以此法使用或打出了两张：红色牌，此牌回复伤害基数+1，且你摸一张牌；黑色牌，你获得当前回合角色一张牌。",
 
+}
 
+local godganning = General(extension, "joy__godganning", "god", 3, 6)
+local poxi = fk.CreateActiveSkill{
+  name = "joy__poxi",
+  anim_type = "control",
+  prompt = "#joy__poxi-prompt",
+  card_num = 0,
+  target_num = 1,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) < 1
+  end,
+  card_filter = function() return false end,
+  target_filter = function(self, to_select, selected, selected_cards)
+    return #selected == 0 and to_select ~= Self.id and not Fk:currentRoom():getPlayerById(to_select):isKongcheng()
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local player_hands = player:getCardIds("h")
+    local target_hands = target:getCardIds("h")
+    local cards = room:askForPoxi(player, "joy__poxi_discard", {
+      { player.general, player_hands },
+      { target.general, target_hands },
+    }, nil, true)
+    if #cards == 0 then return end
+    local cards1 = table.filter(cards, function(id) return table.contains(player_hands, id) end)
+    local cards2 = table.filter(cards, function(id) return table.contains(target_hands, id) end)
+    local moveInfos = {}
+    if #cards1 > 0 then
+      table.insert(moveInfos, {
+        from = player.id,
+        ids = cards1,
+        toArea = Card.DiscardPile,
+        moveReason = fk.ReasonDiscard,
+        proposer = effect.from,
+        skillName = self.name,
+      })
+    end
+    if #cards2 > 0 then
+      table.insert(moveInfos, {
+        from = target.id,
+        ids = cards2,
+        toArea = Card.DiscardPile,
+        moveReason = fk.ReasonDiscard,
+        proposer = effect.from,
+        skillName = self.name,
+      })
+    end
+    room:moveCards(table.unpack(moveInfos))
+    if player.dead then return false end
+    if #cards1 == 0 then
+      room:changeMaxHp(player, -1)
+    elseif #cards1 == 2 and player:isWounded() then
+      room:recover({
+        who = player,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name
+      })
+    elseif #cards1 == 3 then
+      room:drawCards(player, 3, self.name)
+    end
+    return false
+  end,
+}
+Fk:addPoxiMethod{
+  name = "joy__poxi_discard",
+  card_filter = function(to_select, selected, data)
+    local suit = Fk:getCardById(to_select).suit
+    if suit == Card.NoSuit then return false end
+    return not table.find(selected, function(id) return Fk:getCardById(id).suit == suit end)
+    and not (Self:prohibitDiscard(Fk:getCardById(to_select)) and table.contains(data[1][2], to_select))
+  end,
+  feasible = function(selected)
+    return #selected == 3
+  end,
+  prompt = function ()
+    return "魄袭：弃置双方手里三张不同花色的牌"
+  end
+}
+local gn_jieying = fk.CreateTriggerSkill{
+  name = "joy__gn_jieying",
+  anim_type = "drawcard",
+  events = {fk.DrawNCards, fk.EventPhaseStart, fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return false end
+    if event == fk.TurnStart then
+      return player == target and table.every(player.room.alive_players, function (p)
+        return p:getMark("@@joy__jieying_camp") == 0 end)
+    elseif event == fk.EventPhaseStart and target.phase ~= Player.Finish then
+      return false
+    end
+    return target:getMark("@@joy__jieying_camp") > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    if event == fk.EventPhaseStart and player == target then
+      local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
+        return p.id end), 1, 1, "#joy__gn_jieying-choose", self.name, true)
+      if #to > 0 then
+        self.cost_data = to[1]
+        return true
+      end
+      return false
+    end
+    return true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnStart then
+      room:addPlayerMark(player, "@@joy__jieying_camp")
+    elseif event == fk.DrawNCards then
+      data.n = data.n + 1
+    elseif event == fk.EventPhaseStart then
+      if player == target then
+        local tar = room:getPlayerById(self.cost_data)
+        room:setPlayerMark(player, "@@joy__jieying_camp", 0)
+        room:addPlayerMark(tar, "@@joy__jieying_camp")
+      else
+        room:setPlayerMark(target, "@@joy__jieying_camp", 0)
+        if not target:isKongcheng() then
+          local dummy = Fk:cloneCard("dilu")
+          dummy:addSubcards(target.player_cards[Player.Hand])
+          room:obtainCard(player.id, dummy, false, fk.ReasonPrey)
+        end
+      end
+    end
+    return false
+  end,
 
+  refresh_events = {fk.BuryVictim, fk.EventLoseSkill},
+  can_refresh = function(self, event, target, player, data)
+    return (event == fk.BuryVictim or data == self) and player:getMark("@@joy__jieying_camp") > 0
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    if table.every(room.alive_players, function (p) return not p:hasSkill(self.name, true) end) then
+      room:setPlayerMark(player, "@@joy__jieying_camp", 0)
+    end
+  end,
+}
+local gn_jieying_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__gn_jieying_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:getMark("@@joy__jieying_camp") > 0 and scope == Player.HistoryPhase then
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+    end
+  end,
+}
+local gn_jieying_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__gn_jieying_maxcards",
+  correct_func = function(self, player)
+    if player:getMark("@@joy__jieying_camp") > 0 then
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+    else
+      return 0
+    end
+  end,
+}
+gn_jieying:addRelatedSkill(gn_jieying_targetmod)
+gn_jieying:addRelatedSkill(gn_jieying_maxcards)
+godganning:addSkill(poxi)
+godganning:addSkill(gn_jieying)
+Fk:loadTranslationTable{
+  ["joy__godganning"] = "神甘宁",
+  ["#joy__godganning"] = "江表之力牧",
 
+  ["joy__poxi"] = "魄袭",
+  [":joy__poxi"] = "出牌阶段限一次，你可以观看一名其他角色的手牌，然后你可以弃置你与其手里共计三张不同花色的牌。若如此做，根据此次弃置你的牌数量执行以下效果：没有，体力上限减1；两张，回复1点体力；三张，摸三张牌。",
+  ["joy__gn_jieying"] = "劫营",
+  [":joy__gn_jieying"] = "回合开始时，若没有角色有“营”标记，你获得一个“营”标记；结束阶段你可以将“营”标记交给一名其他角色；"..
+  "有“营”的角色摸牌阶段多摸一张牌、使用【杀】的次数上限+1、手牌上限+1。有“营”的其他角色的结束阶段，移去“营”，然后你获得其所有手牌。",
+  --欢杀劫营其他角色回合结束只移去“营”而不是转移到神甘宁头上（虽然没什么区别..)
 
+  ["joy__poxi_discard"] = "魄袭",
+  ["#joy__poxi-prompt"] = "魄袭：选择一名有手牌的其他角色，并可弃置你与其手牌中共计三张花色各不相同的牌",
+  ["@@joy__jieying_camp"] = "营",
+  ["#joy__poxi-choose"] = "魄袭：从双方的手牌中选出四张不同花色的牌弃置，或者点取消",
+  ["#joy__gn_jieying-choose"] = "劫营：你可将营标记交给其他角色",
+}
 
+local godguanyu = General(extension, "joy__godguanyu", "god", 5)
+local joy__wushen = fk.CreateViewAsSkill{
+  name = "joy__wushen",
+  anim_type = "offensive",
+  pattern = "slash",
+  card_filter = function(self, to_select, selected)
+    if #selected == 1 then return false end
+    return Fk:getCardById(to_select).suit == Card.Heart
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then
+      return nil
+    end
+    local c = Fk:cloneCard("slash")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+}
+local wushen_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__wushen_targetmod",
+  anim_type = "offensive",
+  distance_limit_func =  function(self, player, skill, card)
+    if player:hasSkill("joy__wushen") and skill.trueName == "slash_skill" and card.suit == Card.Heart then
+      return 999
+    end
+    return 0
+  end,
+}
+local wushen_trigger = fk.CreateTriggerSkill{
+  name = "#joy__wushen_trigger",
+  main_skill = joy__wushen,
+  mute = true,
+  events = {fk.AfterCardUseDeclared},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      return  data.card.trueName == "slash" and data.card.suit == Card.Heart
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+      room:notifySkillInvoked(player, "joy__wushen", "offensive")
+      data.additionalDamage = (data.additionalDamage or 0) + 1
+  end,
+}
+local wuhun = fk.CreateTriggerSkill{
+  name = "joy__wuhun",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {fk.Damaged,fk.AfterDying, fk.Death},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self, false, true) then
+      if event == fk.Damaged then
+        return data.from and not data.from.dead and not player.dead
+      else
+        local availableTargets = {}
+        local n = 0
+        for _, p in ipairs(player.room.alive_players) do
+          if p:getMark("@joy__nightmare") > n then
+            availableTargets = {}
+            table.insert(availableTargets, p.id)
+            n = p:getMark("@joy__nightmare")
+          elseif p:getMark("@joy__nightmare") == n and n ~= 0 then
+            table.insert(availableTargets, p.id)
+          end
+        end
+        if #availableTargets > 0 then
+          self.cost_data = availableTargets
+          return true
+        end
+      end
+    end
+    return false
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.Damaged then
+      room:addPlayerMark(data.from, "@joy__nightmare", data.damage)
+    else
+      local p_id
+      if #self.cost_data > 1 then
+        p_id = room:askForChoosePlayers(player, self.cost_data, 1, 1, "#joy__wuhun-choose", self.name, false)[1]
+      else
+        p_id = self.cost_data[1]
+      end
+      local judge = {
+        who = room:getPlayerById(p_id),
+        reason = self.name,
+        pattern = "peach,god_salvation|.",
+      }
+      room:judge(judge)
+      if judge.card.name == "peach" or judge.card.name == "god_salvation" then return false end
+      local p = room:getPlayerById(p_id)
+      room:loseHp(p,5,self.name)
+    end
+  end,
+}
+joy__wushen:addRelatedSkill(wushen_targetmod)
+joy__wushen:addRelatedSkill(wushen_trigger)
+godguanyu:addSkill(joy__wushen)
+godguanyu:addSkill(wuhun)
+Fk:loadTranslationTable {
+  ["joy__godguanyu"] = "神关羽",
+  ["#joy__godguanyu"] = "神鬼再临",
+
+  ["joy__wushen"] = "武神",
+  [":joy__wushen"] = "你的<font color='red'>♥</font>手牌可以视为【杀】；你使用<font color='red'>♥</font>【杀】无距离限制且伤害+1。",
+  ["joy__wuhun"] = "武魂",
+  [":joy__wuhun"] = "锁定技，当你受到1点伤害后，伤害来源获得1枚“梦魇”；你脱离濒死状态或死亡时，令“梦魇”最多的一名其他角色判定，若不为【桃】或【桃园结义】，该角色流失5点体力。",
+  ["@joy__nightmare"] = "梦魇",
+  ["#joy__wuhun-choose"] = "武魂：选择一名“梦魇”最多的其他角色",
+
+}
+
+local godzhouyu = General(extension, "joy__godzhouyu", "god", 4)
+local qinyin = fk.CreateTriggerSkill{
+  name = "joy__qinyin",
+  events = {fk.EventPhaseEnd},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) and player.phase == Player.Discard then
+      local x = 0
+      local logic = player.room.logic
+      logic:getEventsOfScope(GameEvent.MoveCards, 1, function (e)
+        for _, move in ipairs(e.data) do
+          if move.from == player.id and move.moveReason == fk.ReasonDiscard and move.skillName == "game_rule" then
+            x = x + #move.moveInfo
+            if x > 0 then return true end
+          end
+        end
+        return false
+      end, Player.HistoryTurn)
+      return x > 0
+    end
+  end,
+  
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local choices = {"loseHp","drawcard"}
+    if not table.every(room.alive_players, function (p) return not p:isWounded() end) then
+      table.insert(choices, 1, "recover")
+    end
+    local choice = room:askForChoice(player, choices, self.name)
+    if choice == "recover" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if p:isWounded() then
+          room:recover{
+            who = p,
+            num = 1,
+            recoverBy = player,
+            skillName = self.name
+          }
+        end
+      end
+    elseif choice == "loseHp" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if not p.dead then room:loseHp(p, 1, self.name) end
+      end
+    elseif choice == "drawcard" then
+      for _, p in ipairs(room:getAlivePlayers()) do
+        if not p.dead then room:drawCards(p, 1, self.name) end
+      end
+    end
+  end,
+}
+local yeyan = fk.CreateTriggerSkill{
+  name = "joy__yeyan",
+  anim_type = "offensive",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      player.phase == Player.Start 
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player),  Util.IdMapper), 1, 1, "#joy__yeyan-choose", self.name, true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:damage({
+      from = player,
+      to = room:getPlayerById(self.cost_data),
+      damage = 1,
+      damageType = fk.FireDamage,
+      skillName = self.name,
+    })
+  end,
+}
+godzhouyu:addSkill(qinyin)
+godzhouyu:addSkill(yeyan)
+Fk:loadTranslationTable{
+  ["joy__godzhouyu"] = "神周瑜",
+  ["#joy__godzhouyu"] = "赤壁的火神",
+
+  ["joy__qinyin"] = "琴音",
+  [":joy__qinyin"] = "弃牌阶段结束时，若你此阶段弃置过至少一张手牌，你可以选择：1. 令所有角色各回复1点体力；2. 令所有角色各失去1点体力。3.令所有角色各摸一张牌",
+  ["joy__yeyan"] = "业炎",
+  [":joy__yeyan"] = "出牌阶段开始时，你可以选择一名其他角色对其造成1点火焰伤害。",
+  ["#joy__yeyan-choose"] = "业炎：选择1名其他角色对其造成1点火焰伤害",
+
+  ["drawcard"] = "各摸一张牌"
+}
 
 
 
