@@ -612,4 +612,222 @@ Fk:loadTranslationTable{
 
 }
 
+local joyex__weiyan = General(extension, "joyex__weiyan", "shu", 4)
+local joyex__kuanggu = fk.CreateTriggerSkill{
+  name = "joyex__kuanggu",
+  anim_type = "drawcard",
+  events = {fk.Damage},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player
+  end,
+  on_trigger = function(self, event, target, player, data)
+    self.cancel_cost = false
+    for i = 1, data.damage do
+      self:doCost(event, target, player, data)
+      if self.cost_data == "Cancel" or player.dead then break end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local choices = {"draw1", "Cancel"}
+    if player:isWounded() then
+      table.insert(choices, 2, "recover")
+    end
+    self.cost_data = room:askForChoice(player, choices, self.name)
+    return self.cost_data ~= "Cancel"
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if self.cost_data == "recover" then
+      room:recover({
+        who = player,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name
+      })
+    elseif self.cost_data == "draw1" then
+      player:drawCards(1, self.name)
+    end
+  end,
+}
+local joyex__qimou_targetmod = fk.CreateTargetModSkill{
+  name = "#joyex__qimou_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and scope == Player.HistoryPhase then
+      return player:getMark("@joyex__qimou-turn") or 0
+    end
+  end,
+}
+local joyex__qimou_distance = fk.CreateDistanceSkill{
+  name = "#joyex__qimou_distance",
+  correct_func = function(self, from, to)
+    return -from:getMark("@joyex__qimou-turn")
+  end,
+}
+local joyex__qimou = fk.CreateActiveSkill{
+  name = "joyex__qimou",
+  anim_type = "offensive",
+  card_num = 0,
+  target_num = 0,
+  frequency = Skill.Limited,
+  interaction = function()
+    return UI.Spin {
+      from = 1,
+      to = Self.hp,
+    }
+  end,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryGame) == 0 and player.hp > 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local tolose = self.interaction.data
+    room:loseHp(player, tolose, self.name)
+    if player.dead then return end
+    room:setPlayerMark(player, "@joyex__qimou-turn", tolose)
+    player:drawCards(1, self.name)
+  end,
+}
+joyex__qimou:addRelatedSkill(joyex__qimou_targetmod)
+joyex__qimou:addRelatedSkill(joyex__qimou_distance)
+joyex__weiyan:addSkill(joyex__kuanggu)
+joyex__weiyan:addSkill(joyex__qimou)
+Fk:loadTranslationTable{
+  ["joyex__weiyan"] = "界魏延",
+  ["#joyex__weiyan"] = "嗜血的独狼",
+
+  ["joyex__kuanggu"] = "狂骨",
+  [":joyex__kuanggu"] = "你对一名角色造成1点伤害后，你可以选择摸一张牌或回复1点体力。",
+  ["joyex__qimou"] = "奇谋",
+  [":joyex__qimou"] = "限定技，出牌阶段，你可以失去X点体力，摸1张牌，本回合内与其他角色计算距离-X且可以多使用X张杀。",
+  ["@joyex__qimou-turn"] = "奇谋",
+
+}
+
+local liushan = General(extension, "joy__liushan", "shu", 4)
+local fangquan = fk.CreateTriggerSkill{
+  name = "joy__fangquan",
+  anim_type = "support",
+  events = {fk.EventPhaseChanging},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.to == Player.Play
+  end,
+  on_use = function(self, event, target, player, data)
+    player:skip(Player.Play)
+    player.room:setPlayerMark(player, "joy__fangquan_extra", 1)
+    return true
+  end,
+
+  refresh_events = {fk.TurnEnd},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and player:getMark("joy__fangquan_extra") > 0
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    room:setPlayerMark(player, "joy__fangquan_extra", 0)
+    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), function(p)
+      return p.id end), 1, 1, "#joy__fangquan-give", self.name,false)
+    room:getPlayerById(tos[1]):gainAnExtraTurn()
+    
+  end,
+}
+local ruoyu = fk.CreateTriggerSkill{
+  name = "joy__ruoyu$",
+  frequency = Skill.Wake,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      player:usedSkillTimes(self.name, Player.HistoryGame) == 0 and
+      player.phase == Player.Start
+  end,
+  can_wake = function(self, event, target, player, data)
+    return table.every(player.room:getOtherPlayers(player), function(p) return p.hp >= player.hp end)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:changeMaxHp(player, 1)
+    if player:isWounded() then 
+      room:recover({
+        who = player,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name,
+      })
+    end
+    room:handleAddLoseSkills(player, "joy__jijiang", nil, true, false)
+  end,
+}
+local jijiang = fk.CreateViewAsSkill{
+  name = "joy__jijiang$",
+  anim_type = "offensive",
+  pattern = "slash",
+  card_filter = Util.FalseFunc,
+  view_as = function(self, cards)
+    if #cards ~= 0 then
+      return nil
+    end
+    local c = Fk:cloneCard("slash")
+    c.skillName = self.name
+    return c
+  end,
+  before_use = function(self, player, use)
+    local room = player.room
+    if use.tos then
+      room:doIndicate(player.id, TargetGroup:getRealTargets(use.tos))
+    end
+
+    for _, p in ipairs(room:getOtherPlayers(player)) do
+      if p.kingdom == "shu" then
+        local cardResponded = room:askForResponse(p, "slash", "slash", "#joy__jijiang-ask:" .. player.id, true)
+        if cardResponded then
+          room:responseCard({
+            from = p.id,
+            card = cardResponded,
+            skipDrop = true,
+          })
+
+          use.card = cardResponded
+          if not p.dead and not player.dead then
+            player:drawCards(1,self.name)
+            p:drawCards(1,self.name)
+          end
+          return
+        end
+      end
+    end
+
+    room:setPlayerMark(player, "joy__jijiang-failed-phase", 1)
+    return self.name
+  end,
+  enabled_at_play = function(self, player)
+    return player:getMark("joy__jijiang-failed-phase") == 0 and not table.every(Fk:currentRoom().alive_players, function(p)
+      return p == player or p.kingdom ~= "shu"
+    end)
+  end,
+  enabled_at_response = function(self, player)
+    return not table.every(Fk:currentRoom().alive_players, function(p)
+      return p == player or p.kingdom ~= "shu"
+    end)
+  end,
+}
+liushan:addSkill("xiangle")
+liushan:addSkill(fangquan)
+liushan:addSkill(ruoyu)
+liushan:addRelatedSkill(jijiang)
+Fk:loadTranslationTable{
+  ["joy__liushan"] = "刘禅",
+  ["#joy__liushan"] = "无为的真命主",
+
+  ["joy__fangquan"] = "放权",
+  [":joy__fangquan"] = "你可以跳过你的出牌阶段，然后此回合结束时，令一名其他角色进行一个额外的回合。",
+  ["#joy__fangquan-give"] = "选择一名其他角色进行一个额外的回合",
+  ["joy__ruoyu"] = "若愚",
+  [":joy__ruoyu"] = "主公技，觉醒技，准备阶段，若你是体力值为场上最小的角色，你增加1点体力上限，回复1点体力，然后获得“激将”。",
+  ["joy__jijiang"] = "激将",
+  [":joy__jijiang"] = "主公技，其他蜀势力角色可以在你需要时代替你使用或打出【杀】，若以此法出【杀】，则你与其各摸一张牌。",
+
+  ["#joy__jijiang-ask"] =  "激将：你可代替 %src 打出一张杀，然后其与你各摸一张牌"
+
+}
+
 return extension

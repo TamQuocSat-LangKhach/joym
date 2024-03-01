@@ -563,4 +563,111 @@ Fk:loadTranslationTable{
 
 }
 
+local caorui = General(extension, "joy__caorui", "wei", 3)
+local mingjian = fk.CreateActiveSkill{
+  name = "joy__mingjian",
+  anim_type = "support",
+  min_card_num = 1,
+  target_num = 1,
+  can_use = function(self, player)
+    return not player:isKongcheng() and player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  card_filter = function(self, to_select, selected)
+    return Fk:currentRoom():getCardArea(to_select) ~= Card.PlayerEquip
+  end,
+  target_filter = function(self, to_select, selected)
+    return #selected == 0 and to_select ~= Self.id
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local cards = effect.cards
+    local dummy = Fk:cloneCard("dilu")
+    room:moveCardTo(cards, Player.Hand, target, fk.ReasonGive, self.name, nil, false)
+    room:addPlayerMark(target, "@@" .. self.name, 1)
+  end,
+}
+local mingjian_record = fk.CreateTriggerSkill{
+  name = "#joy__mingjian_record",
+
+  refresh_events = {fk.TurnStart},
+  can_refresh = function(self, event, target, player, data)
+    return player:getMark("@@joy__mingjian") > 0 and target == player
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    room:addPlayerMark(player, "@@joy__mingjian-turn", player:getMark("@@joy__mingjian"))
+    room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, player:getMark("@@joy__mingjian"))
+    room:setPlayerMark(player, "@@joy__mingjian", 0)
+  end,
+}
+local mingjian_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__mingjian_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:getMark("@@joy__mingjian-turn") > 0 and scope == Player.HistoryPhase then
+      return player:getMark("@@joy__mingjian-turn")
+    end
+  end,
+}
+local xingshuai = fk.CreateTriggerSkill{
+  name = "joy__xingshuai$",
+  anim_type = "defensive",
+  frequency = Skill.Limited,
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player:usedSkillTimes(self.name, Player.HistoryGame) == 0 and
+      not table.every(player.room:getOtherPlayers(player), function(p) return p.kingdom ~= "wei" end)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local targets = {}
+    for _, p in ipairs(room:getOtherPlayers(player)) do
+      if p.kingdom == "wei" and room:askForSkillInvoke(p, self.name, data, "#joy__xingshuai-invoke::"..player.id) then
+        table.insert(targets, p)
+      end
+    end
+    if #targets > 0 then
+      for _, p in ipairs(targets) do
+        room:recover{
+          who = player,
+          num = 1,
+          recoverBy = p,
+          skillName = self.name
+        }
+      end
+    end
+    if not player.dying then
+      for _, p in ipairs(targets) do
+        room:damage{
+          to = p,
+          damage = 1,
+          skillName = self.name,
+        }
+        if not p.dead then
+            room:drawCards(p,1,self.name)
+        end
+      end
+    end
+  end,
+}
+mingjian:addRelatedSkill(mingjian_record)
+mingjian:addRelatedSkill(mingjian_targetmod)
+caorui:addSkill("huituo")
+caorui:addSkill(mingjian)
+caorui:addSkill(xingshuai)
+Fk:loadTranslationTable{
+  ["joy__caorui"] = "曹叡",
+
+  ["joy__mingjian"] = "明鉴",
+  [":joy__mingjian"] = "出牌阶段限一次，你可以将任意张手牌交给一名其他角色，然后该角色下回合的手牌上限+1，且出牌阶段内可以多使用一张【杀】。",
+  ["joy__xingshuai"] = "兴衰",
+  [":joy__xingshuai"] = "主公技，限定技，当你进入濒死状态时，你可令其他魏势力角色依次选择是否令你回复1点体力。选择是的角色在此次濒死结算结束后"..
+  "受到1点无来源的伤害并摸一张牌。",
+
+  ["@@joy__mingjian"] = "明鉴",
+  ["@@joy__mingjian-turn"] = "明鉴",
+  ["#joy__xingshuai-invoke"] = "兴衰：你可以令%dest回复1点体力，结算后你受到1点伤害并摸一张牌",
+
+}
+
 return extension

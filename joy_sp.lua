@@ -405,6 +405,82 @@ Fk:loadTranslationTable{
 
 }
 
+local joy__sunhao = General(extension, "joy__sunhao", "wu", 5)
+local joy__canshi = fk.CreateTriggerSkill{
+  name = "joy__canshi",
+  anim_type = "drawcard",
+  events = {fk.DrawNCards},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and table.find(player.room.alive_players, function (p)
+      return p:isWounded() or (player:hasSkill("joy__guiming") and p.kingdom == "wu" )
+    end)
+  end,
+  on_cost = function (self, event, target, player, data)
+    local n = 0
+    for _, p in ipairs(player.room.alive_players) do
+      if p:isWounded() or (player:hasSkill("joy__guiming") and p.kingdom == "wu" ) then
+        n = n + 1
+      end
+    end
+    if player.room:askForSkillInvoke(player, self.name, nil, "#joy__canshi-invoke:::"..n) then
+      self.cost_data = n
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    data.n = data.n + self.cost_data
+  end,
+}
+local joy__canshi_delay = fk.CreateTriggerSkill{
+  name = "#joy__canshi_delay",
+  anim_type = "negative",
+  events = {fk.CardUsing},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and data.card.trueName == "slash" and
+      player:usedSkillTimes(joy__canshi.name) > 0 and not player:isNude()
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    player.room:askForDiscard(player, 1, 1, true, self.name, false)
+  end,
+}
+local joy__chouhai = fk.CreateTriggerSkill{
+  name = "joy__chouhai",
+  anim_type = "negative",
+  frequency = Skill.Compulsory,
+  events ={fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player:isKongcheng() and #player:getCardIds("e") == 0 and data.card and data.card.trueName == "slash"
+    
+  end,
+  on_use = function(self, event, target, player, data)
+    data.damage = data.damage + 1
+  end,
+}
+local guiming = fk.CreateTriggerSkill{
+  name = "joy__guiming$",
+  frequency = Skill.Compulsory,
+}
+joy__canshi:addRelatedSkill(joy__canshi_delay)
+joy__sunhao:addSkill(joy__canshi)
+joy__sunhao:addSkill(joy__chouhai)
+joy__sunhao:addSkill(guiming)
+Fk:loadTranslationTable{
+  ["joy__sunhao"] = "孙皓",
+  ["#joy__sunhao"] = "时日曷丧",
+
+  ["joy__canshi"] = "残蚀",
+  [":joy__canshi"] = "摸牌阶段，你可以多摸X张牌（X为已受伤的角色数），若如此做，当你于此回合内使用【杀】时，你弃置一张牌。",
+  ["#joy__canshi_delay"] = "残蚀",
+  ["joy__chouhai"] = "仇海",
+  [":joy__chouhai"] = "锁定技，当你受到【杀】造成的伤害时，若你没有手牌和装备，此伤害+1。",
+  ["#joy__canshi-invoke"] = "残蚀：你可以多摸 %arg 张牌",
+
+  ["joy__guiming"] = "归命",
+  [":joy__guiming"] = "主公技，锁定技，吴势力角色于你的回合内视为已受伤的角色。",
+
+}
+
 local sunshangxiang = General(extension, "joysp__sunshangxiang", "shu", 3, 3, General.Female)
 local joy__liangzhu = fk.CreateTriggerSkill{
   name = "joy__liangzhu",
@@ -1102,6 +1178,140 @@ Fk:loadTranslationTable{
 
   ["#joy__chenqing-choose"] = "陈情：令一名角色摸五张牌然后弃四张牌，若花色各不相同视为对濒死角色使用【桃】",
   ["#joy__chenqing-discard"] = "陈情：需弃置四张牌，若花色各不相同则视为对濒死角色使用【桃】",
+}
+
+local joysp__zhangfei = General(extension, "joysp__zhangfei", "shu", 4)
+local joysp__paoxiao = fk.CreateTargetModSkill{
+  name = "joysp__paoxiao",
+  frequency = Skill.Compulsory,
+  residue_func = function(self, player, skill, scope)
+    if player:hasSkill(self) and skill.trueName == "slash_skill"
+      and scope == Player.HistoryPhase then
+      return 999
+    end
+  end,
+  bypass_distances = function(self, player, skill, scope)
+    return player:hasSkill(self) and skill.trueName == "slash_skill" 
+  end,
+}
+local joysp__paoxiao_damage = fk.CreateTriggerSkill{
+  name = "#joysp__paoxiao_damage",
+  events = {fk.TargetSpecified,fk.AfterCardTargetDeclared},
+  frequency = Skill.Compulsory,
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player 
+    and data.card.trueName == "slash" and player:usedCardTimes("slash", Player.HistoryPhase) > 1
+  end,
+  on_use = function(self, event, target, player, data)
+  if event == fk.AfterCardTargetDeclared and player:usedCardTimes("slash", Player.HistoryPhase) > 2 then
+    local room = player.room
+    local card_event = room.logic:getCurrentEvent():findParent(GameEvent.UseCard)
+    card_event.paoxiao_armor = true
+      for _, p in ipairs(room.alive_players) do
+        room:addPlayerMark(p, fk.MarkArmorNullified)
+      end
+  else
+    if player:usedCardTimes("slash", Player.HistoryPhase) > 2 then
+      data.disresponsive = true
+    end
+    data.additionalDamage = (data.additionalDamage or 0) + 1
+  end
+end,
+
+refresh_events = {fk.CardUseFinished},
+  can_refresh = function(self, event, target, player, data)
+    if player ~= target then return false end
+    local card_event = player.room.logic:getCurrentEvent():findParent(GameEvent.UseCard, true)
+    return card_event and card_event.paoxiao_armor
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    for _, p in ipairs(room.alive_players) do
+      room:removePlayerMark(p, fk.MarkArmorNullified)
+    end
+  end,
+
+}
+joysp__paoxiao:addRelatedSkill(joysp__paoxiao_damage)
+local joy__xuhe = fk.CreateTriggerSkill{
+  name = "joy__xuhe",
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  events = {fk.CardEffectCancelledOut, fk.CardUsing,fk.CardResponding},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.CardEffectCancelledOut then
+      return target == player and player:hasSkill(self) and data.card.trueName == "slash"
+    else
+      return target == player and player:hasSkill(self) and data.card.name == "jink"
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    if not player.dead then
+    player:drawCards(1,self.name)
+    end
+  end,
+
+}
+joysp__zhangfei:addSkill(joysp__paoxiao)
+joysp__zhangfei:addSkill(joy__xuhe)
+Fk:loadTranslationTable{
+  ["joysp__zhangfei"] = "张飞",
+  
+  ["joysp__paoxiao"] = "咆哮",
+  ["#joysp__paoxiao_damage"] = "咆哮",
+  [":joysp__paoxiao"] = "锁定技，你使用【杀】无次数距离限制，本回合第二张【杀】起伤害+1；第三张【杀】起无视防具且不可响应。",
+  ["joy__xuhe"] = "虚吓",
+  [":joy__xuhe"] = "锁定技，你的【杀】被【闪】抵消后，摸一张牌；你使用或打出【闪】后，摸一张牌。",
+
+}
+
+local pangde = General(extension, "joysp__pangde", "wei", 4)
+local juesi = fk.CreateActiveSkill{
+  name = "joysp__juesi",
+  anim_type = "offensive",
+  card_num = 1,
+  target_num = 1,
+  can_use = function(self, player)
+    return not player:isKongcheng()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).trueName == "slash" and not Self:prohibitDiscard(Fk:getCardById(to_select))
+  end,
+  target_filter = function(self, to_select, selected)
+    local target = Fk:currentRoom():getPlayerById(to_select)
+    return #selected == 0 and not target:isNude() and Self:inMyAttackRange(target)
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    room:throwCard(effect.cards, self.name, player, player)
+    local card = room:askForDiscard(target, 1, 1, true, self.name, false, ".", "#joy__juesi-discard:"..player.id)
+    if #card > 0 then
+      card = Fk:getCardById(card[1])
+      if card.trueName ~= "slash" and  player.hp  <= target.hp  and not player.dead and not target.dead then
+        if player.room:askForSkillInvoke(player,self.name,".","#joy__juesi-drawCards") then
+          player:drawCards(2,self.name)
+        end
+      elseif card.trueName == "slash"  and not player.dead and not target.dead then
+        room:useVirtualCard("duel", nil, player, target, self.name)
+      end
+    end
+  end,
+}
+pangde:addSkill("joy__yuma")
+pangde:addSkill(juesi)
+Fk:loadTranslationTable{
+  ["joysp__pangde"] = "庞德",
+  ["#joysp__pangde"] = "抬榇之悟",
+
+  ["joysp__juesi"] = "决死",
+  [":joysp__juesi"] = "出牌阶段，你可以弃置一张【杀】并选择攻击范围内的一名其他角色，然后令该角色弃置一张牌。"..
+  "若该角色弃置的牌不为【杀】且你的体力值小于等于该角色，则你可以摸两张牌；若弃置的是杀，你视为对其使用一张【决斗】。",
+
+  ["#joy__juesi-discard"] = "决死：你需弃置一张牌，若不为【杀】且 %src 体力值小于等于你，其可摸两张牌，若为【杀】，视为其对你使用【决斗】",
+  ["#joy__juesi-drawCards"] = "决死：是否摸两张牌",
+
 }
 
 return extension

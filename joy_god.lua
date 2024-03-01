@@ -257,7 +257,7 @@ local joy__jieying = fk.CreateTriggerSkill{
         return p ~= player and not p.chained
       end)
       if #targets == 0 then return false end
-      local tos = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__jieying-target", self.name, true)
+      local tos = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__jieying-target", self.name, false)
       if #tos > 0 then
         room:getPlayerById(tos[1]):setChainState(true)
       end
@@ -284,13 +284,13 @@ Fk:loadTranslationTable{
   ["joy__longnu"] = "龙怒",
   [":joy__longnu"] = "锁定技，出牌阶段开始时，你须选一项：1.失去1点体力并摸两张牌，你的红色手牌于本回合均视为无距离限制的火【杀】；2.扣减1点体力上限，你的黑色手牌于本回合均视为无次数限制的雷【杀】。",
   ["joy__jieying"] = "结营",
-  [":joy__jieying"] = "锁定技，你始终处于横置状态；每当你受到伤害时，摸一张牌；处于连环状态的角色手牌上限+2；结束阶段，你可以横置一名其他角色。",
+  [":joy__jieying"] = "锁定技，你始终处于横置状态；每当你受到伤害时，摸一张牌；处于连环状态的角色手牌上限+2；结束阶段，你横置一名其他角色。",
 
   ["#joy__longnu_filter"] = "龙怒",
   ["joy__longnu_red"] = "失去体力并摸牌，红色手牌视为火杀",
   ["joy__longnu_black"] = "减体力上限，黑色手牌视为雷杀",
   ["@joy__longnu-turn"] = "龙怒",
-  ["#joy__jieying-target"] = "结营：你可以横置一名其他角色",
+  ["#joy__jieying-target"] = "结营：横置一名其他角色",
 }
 
 local goddiaochan = General(extension, "joy__goddiaochan", "god", 3, 3, General.Female)
@@ -1670,7 +1670,6 @@ Fk:loadTranslationTable{
   ["joy__gn_jieying"] = "劫营",
   [":joy__gn_jieying"] = "回合开始时，若没有角色有“营”标记，你获得一个“营”标记；结束阶段你可以将“营”标记交给一名其他角色；"..
   "有“营”的角色摸牌阶段多摸一张牌、使用【杀】的次数上限+1、手牌上限+1。有“营”的其他角色的结束阶段，移去“营”，然后你获得其所有手牌。",
-  --欢杀劫营其他角色回合结束只移去“营”而不是转移到神甘宁头上（虽然没什么区别..)
 
   ["joy__poxi_discard"] = "魄袭",
   ["#joy__poxi-prompt"] = "魄袭：选择一名有手牌的其他角色，并可弃置你与其手牌中共计三张花色各不相同的牌",
@@ -1883,7 +1882,63 @@ Fk:loadTranslationTable{
   ["drawcard"] = "各摸一张牌"
 }
 
+local godcaocao = General(extension, "joy__godcaocao", "god", 3)
+local guixin = fk.CreateTriggerSkill{
+  name = "joy__guixin",
+  anim_type = "masochism",
+  events = {fk.Damaged},
+  on_trigger = function(self, event, target, player, data)
+    self.cancel_cost = false
+    for _ = 1, data.damage do
+      if self.cancel_cost or not player:hasSkill(self) or
+      table.every(player.room:getOtherPlayers(player), function (p) return p:isAllNude() end) then break end
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    if room:askForSkillInvoke(player, self.name, data) then
+      return true
+    end
+    self.cancel_cost = true
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local get = {}
+    room:doIndicate(player.id, table.map(room.alive_players, Util.IdMapper))
+    local choises = {"h","e","j"}
+    local choice = room:askForChoice(player,choises,self.name,"#joy__guixin-choose")
+    for _, p in ipairs(room:getOtherPlayers(player, true)) do
+      if #p:getCardIds(choice) ~= 0 then
+        local id = table.random(p:getCardIds(choice))
+        room:obtainCard(player, id, false, fk.ReasonPrey)
+        table.insert(get, id)
+      elseif not p:isAllNude() then
+        local id = table.random(p:getCardIds("hej"))
+        room:obtainCard(player, id, false, fk.ReasonPrey)
+        table.insert(get, id)
+      end
+      if player.dead then return false end
+    end
+    if player.faceup and #get > 4 then
+      player:turnOver()
+    end
+  end,
+}
+godcaocao:addSkill(guixin)
+godcaocao:addSkill("feiying")
+Fk:loadTranslationTable{
+  ["joy__godcaocao"] = "神曹操",
+  ["#joy__godcaocao"] = "超世之英杰",
 
+  ["joy__guixin"] = "归心",
+  [":joy__guixin"] = "当你受到1点伤害后，你可随机获得所有其他角色区域中的一张牌，如果获得牌大于4张且你为正面，你翻面。",
+  ["#joy__guixin-choose"] = "归心:请选择优先获取的区域",
+  ["h"] = "手牌区",
+  ["e"] = "装备区",
+  ["j"] = "判定区",
+
+}
 
 
 
