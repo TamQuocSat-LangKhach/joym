@@ -321,7 +321,9 @@ local mouliegong = fk.CreateTriggerSkill{
         end
         room:delay(200)
       end
-      room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+      if not player.dead then
+        room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+      end
     end
   end,
 

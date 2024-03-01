@@ -1184,61 +1184,65 @@ local joysp__zhangfei = General(extension, "joysp__zhangfei", "shu", 4)
 local joysp__paoxiao = fk.CreateTargetModSkill{
   name = "joysp__paoxiao",
   frequency = Skill.Compulsory,
-  residue_func = function(self, player, skill, scope)
-    if player:hasSkill(self) and skill.trueName == "slash_skill"
-      and scope == Player.HistoryPhase then
-      return 999
-    end
+  bypass_times = function(self, player, skill, scope)
+    return player:hasSkill(self) and skill.trueName == "slash_skill" and scope == Player.HistoryPhase
   end,
   bypass_distances = function(self, player, skill, scope)
-    return player:hasSkill(self) and skill.trueName == "slash_skill" 
+    return player:hasSkill(self) and skill.trueName == "slash_skill"
   end,
 }
-local joysp__paoxiao_damage = fk.CreateTriggerSkill{
-  name = "#joysp__paoxiao_damage",
-  events = {fk.TargetSpecified,fk.AfterCardTargetDeclared},
+local joysp__paoxiao_trigger = fk.CreateTriggerSkill{
+  name = "#joysp__paoxiao_trigger",
+  events = {fk.TargetSpecified},
   frequency = Skill.Compulsory,
-  mute = true,
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self) and target == player 
-    and data.card.trueName == "slash" and player:usedCardTimes("slash", Player.HistoryPhase) > 1
+    if player:hasSkill(self) and target == player and data.card.trueName == "slash" then
+      local times = #player.room.logic:getEventsOfScope(GameEvent.UseCard, 3, function(e)
+        local use = e.data[1]
+        return use.from == player.id and use.card.trueName == "slash"
+      end, Player.HistoryTurn)
+      return (times == 2 and data.firstTarget) or times > 2
+    end
   end,
   on_use = function(self, event, target, player, data)
-  if event == fk.AfterCardTargetDeclared and player:usedCardTimes("slash", Player.HistoryPhase) > 2 then
     local room = player.room
-    local card_event = room.logic:getCurrentEvent():findParent(GameEvent.UseCard)
-    card_event.paoxiao_armor = true
-      for _, p in ipairs(room.alive_players) do
-        room:addPlayerMark(p, fk.MarkArmorNullified)
-      end
-  else
-    if player:usedCardTimes("slash", Player.HistoryPhase) > 2 then
-      data.disresponsive = true
+    local times = #room.logic:getEventsOfScope(GameEvent.UseCard, 3, function(e)
+      local use = e.data[1]
+      return use.from == player.id and use.card.trueName == "slash"
+    end, Player.HistoryTurn)
+    if data.firstTarget then
+      data.additionalDamage = (data.additionalDamage or 0) + 1
     end
-    data.additionalDamage = (data.additionalDamage or 0) + 1
-  end
-end,
+    if times > 2 then
+      data.disresponsive = true
+      room:addPlayerMark(room:getPlayerById(data.to), fk.MarkArmorNullified)
+      data.extra_data = data.extra_data or {}
+      data.extra_data.joysp__paoxiao = data.extra_data.joysp__paoxiao or {}
+      data.extra_data.joysp__paoxiao[tostring(data.to)] = (data.extra_data.joysp__paoxiao[tostring(data.to)] or 0) + 1
+    end
+  end,
 
-refresh_events = {fk.CardUseFinished},
+  refresh_events = {fk.CardUseFinished},
   can_refresh = function(self, event, target, player, data)
-    if player ~= target then return false end
-    local card_event = player.room.logic:getCurrentEvent():findParent(GameEvent.UseCard, true)
-    return card_event and card_event.paoxiao_armor
+    return data.extra_data and data.extra_data.joysp__paoxiao
   end,
   on_refresh = function(self, event, target, player, data)
     local room = player.room
-    for _, p in ipairs(room.alive_players) do
-      room:removePlayerMark(p, fk.MarkArmorNullified)
+    for key, num in pairs(data.extra_data.joysp__paoxiao) do
+      local p = room:getPlayerById(tonumber(key))
+      if p:getMark(fk.MarkArmorNullified) > 0 then
+        room:removePlayerMark(p, fk.MarkArmorNullified, num)
+      end
     end
+    data.extra_data.joysp__paoxiao = nil
   end,
-
 }
-joysp__paoxiao:addRelatedSkill(joysp__paoxiao_damage)
+joysp__paoxiao:addRelatedSkill(joysp__paoxiao_trigger)
 local joy__xuhe = fk.CreateTriggerSkill{
   name = "joy__xuhe",
   anim_type = "drawcard",
   frequency = Skill.Compulsory,
-  events = {fk.CardEffectCancelledOut, fk.CardUsing,fk.CardResponding},
+  events = {fk.CardEffectCancelledOut, fk.CardUsing, fk.CardResponding},
   can_trigger = function(self, event, target, player, data)
     if event == fk.CardEffectCancelledOut then
       return target == player and player:hasSkill(self) and data.card.trueName == "slash"
@@ -1247,9 +1251,7 @@ local joy__xuhe = fk.CreateTriggerSkill{
     end
   end,
   on_use = function(self, event, target, player, data)
-    if not player.dead then
-    player:drawCards(1,self.name)
-    end
+    player:drawCards(1, self.name)
   end,
 
 }
@@ -1259,11 +1261,10 @@ Fk:loadTranslationTable{
   ["joysp__zhangfei"] = "张飞",
   
   ["joysp__paoxiao"] = "咆哮",
-  ["#joysp__paoxiao_damage"] = "咆哮",
-  [":joysp__paoxiao"] = "锁定技，你使用【杀】无次数距离限制，本回合第二张【杀】起伤害+1；第三张【杀】起无视防具且不可响应。",
+  ["#joysp__paoxiao_trigger"] = "咆哮",
+  [":joysp__paoxiao"] = "锁定技，你使用【杀】无次数距离限制，每回合第二张【杀】起伤害+1；第三张【杀】起无视防具且不可响应。",
   ["joy__xuhe"] = "虚吓",
   [":joy__xuhe"] = "锁定技，你的【杀】被【闪】抵消后，摸一张牌；你使用或打出【闪】后，摸一张牌。",
-
 }
 
 local pangde = General(extension, "joysp__pangde", "wei", 4)

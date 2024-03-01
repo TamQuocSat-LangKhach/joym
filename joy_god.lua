@@ -580,6 +580,10 @@ Fk:loadTranslationTable{
 
 -- 欢乐杀原创
 
+
+
+-- 由于恶性BUG封印神左慈：牌进入和离开void区先后发生后，可能造成错误移动，导致客户端错误地保留或删除了某些牌
+--[[
 local joy__godzuoci = General(extension, "joy__godzuoci", "god", 3)
 
 GetHuanPile = function (room)
@@ -808,6 +812,7 @@ Fk:loadTranslationTable{
   ["$joy__huanjing2"] = "金丹九转，变化万端！",
   ["~joy__godzuoci"] = "当世荣华，不足贪……",
 }
+--]]
 
 local joy__goddaxiaoqiao = General(extension, "joy__goddaxiaoqiao", "god", 4, 4, General.Female)
 
