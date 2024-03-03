@@ -526,23 +526,29 @@ local jianxiong = fk.CreateTriggerSkill{
   name = "joyex__jianxiong",
   anim_type = "masochism",
   events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self)  then
-      return true
+  on_trigger = function(self, event, target, player, data)
+    self.cancel_cost = false
+    for i = 1, data.damage do
+      if self.cancel_cost or player.dead then break end
+      self:doCost(event, target, player, data)
     end
   end,
-  on_use = function(self, event, target, player, data)
-    local choices = {"drawCards1","drawCards2"}
-    local choice = player.room:askForChoice(player,choices,self.name)
-    if choice == "drawCards1" and not player.dead then
-      if data.card and target.room:getCardArea(data.card) == Card.Processing then
-        player.room:obtainCard(player.id, data.card, true, fk.ReasonJustMove)
-      end
-      player.room:drawCards(player,1,self.name)
-    elseif not player.dead then
-      player.room:drawCards(player,2,self.name)
+  on_cost = function(self, event, target, player, data)
+    if player.room:askForSkillInvoke(player, self.name) then
+      return true
     end
-    
+    self.cancel_cost = true
+  end,
+  on_use = function(self, event, target, player, data)
+    local choice = player.room:askForChoice(player, {"joyex__jianxiong_prey", "draw2"}, self.name)
+    if choice == "joyex__jianxiong_prey" then
+      player:drawCards(1, self.name)
+      if not player.dead and data.card and player.room:getCardArea(data.card) == Card.Processing then
+        player.room:obtainCard(player.id, data.card, true, fk.ReasonPrey)
+      end
+    else
+      player:drawCards(2, self.name)
+    end
   end,
 }
 
@@ -587,19 +593,18 @@ local hujia = fk.CreateTriggerSkill{
             data.result:addSubcards(room:getSubcardsByRule(cardResponded, { Card.Processing }))
             data.result.skillName = self.name
           end
-            if player:getMark("joyex__hujia-turn") == 0 then
-              if p.room:askForSkillInvoke(p,self.name,nil,"#joyex__hujia-drawcard:" .. player.id) and not player.dead then
-                player.room:drawCards(player,1,self.name)
-                player.room:setPlayerMark(player,"joyex__hujia-turn",1)
-              end
+          if player:getMark("joyex__hujia-turn") == 0 then
+            if p.room:askForSkillInvoke(p,self.name,nil,"#joyex__hujia-drawcard:" .. player.id) and not player.dead then
+              player.room:drawCards(player,1,self.name)
+              player.room:setPlayerMark(player,"joyex__hujia-turn",1)
             end
+          end
           return true
         end
       end
     end
   end,
 }
-
 
 caocao:addSkill(jianxiong)
 caocao:addSkill(hujia)
@@ -612,12 +617,10 @@ Fk:loadTranslationTable{
   [":joyex__hujia"] = "主公技，其他魏势力角色可以替你使用或打出【闪】。"..
   "其他魏势力角色若以此法使用或打出【闪】时，可以令你摸一张牌，每回合限一张。",
 
-  ["drawCards1"] = "奸雄：摸一张牌并获得对你造成伤害的牌",
-  ["drawCards2"] = "奸雄：摸两张牌",
+  ["joyex__jianxiong_prey"] = "摸一张牌，获得对你造成伤害的牌",
 
   ["#joyex__hujia-ask"] = "护驾:是否为 %src 打出一张闪,若打出可令其摸一张牌(每回合限一张)。",
   ["#joyex__hujia-drawcard"] = "护驾:是否令 %src 摸一张牌？"
-
 }
 
 local huanggai = General(extension, "joyex__huanggai", "wu", 4)
@@ -629,23 +632,21 @@ local zhaxiang_targetmod = fk.CreateTargetModSkill{
     end
     return 0
   end,
-  distance_limit_func =  function(self, player, skill, card)
-    if skill.trueName == "slash_skill" and card.color == Card.Red and player:hasSkill(self) then
-      return 999
-    end
+  bypass_distances = function(self, player, skill, card)
+    return skill.trueName == "slash_skill" and card.color == Card.Red and player:hasSkill(self)
   end,
 }
 local zhaxiang = fk.CreateTriggerSkill{
   name = "joyex__zhaxiang",
-  mute = true,
+  anim_type = "offensive",
   frequency = Skill.Compulsory,
-  events = {fk.TargetSpecified},
+  events = {fk.AfterCardUseDeclared},
   can_trigger = function(self, event, target, player, data)
     return target == player and player:hasSkill(self) and
       data.card.trueName == "slash" and data.card.color == Card.Red
   end,
   on_use = function(self, event, target, player, data)
-    data.disresponsive = true
+    data.disresponsiveList = table.map(player.room.alive_players, Util.IdMapper)
   end,
 }
 zhaxiang:addRelatedSkill(zhaxiang_targetmod)
@@ -655,7 +656,6 @@ Fk:loadTranslationTable{
   ["joyex__huanggai"] = "界黄盖",
   ["joyex__zhaxiang"] = "诈降",
   [":joyex__zhaxiang"] = "锁定技，你使用【杀】次数上限+1、使用红色【杀】无距离限制且不可被响应。",
- 
 }
 
 local lvmeng = General(extension, "joyex__lvmeng", "wu", 4)
@@ -665,36 +665,30 @@ local keji = fk.CreateTriggerSkill{
   events = {fk.EventPhaseChanging},
   can_trigger = function(self, event, target, player, data)
     if target == player and player:hasSkill(self) and data.to == Player.Discard then
-      local room = player.room
-      local logic = room.logic
-      local e = logic:getCurrentEvent():findParent(GameEvent.Turn, true)
-      if e == nil then return false end
-      local end_id = e.id
-      local events = logic.event_recorder[GameEvent.UseCard] or Util.DummyTable
-      for i = #events, 1, -1 do
-        e = events[i]
-        if e.id <= end_id then break end
-        local use = e.data[1]
-        if use.from == player.id and use.card.trueName == "slash" then
-          return false
+      local play_ids = {}
+      player.room.logic:getEventsOfScope(GameEvent.Phase, 1, function (e)
+        if e.data[2] == Player.Play and e.end_id then
+          table.insert(play_ids, {e.id, e.end_id})
         end
-      end
-      events = logic.event_recorder[GameEvent.RespondCard] or Util.DummyTable
-      for i = #events, 1, -1 do
-        e = events[i]
-        if e.id <= end_id then break end
-        local resp = e.data[1]
-        if resp.from == player.id and resp.card.trueName == "slash" then
-          return false
+        return false
+      end, Player.HistoryTurn)
+      if #play_ids == 0 then return true end
+      local function PlayCheck (e)
+        local in_play = false
+        for _, ids in ipairs(play_ids) do
+          if e.id > ids[1] and e.id < ids[2] then
+            in_play = true
+            break
+          end
         end
+        return in_play and e.data[1].from == player.id and e.data[1].card.trueName == "slash"
       end
-      return true
+      return #player.room.logic:getEventsOfScope(GameEvent.UseCard, 1, PlayCheck, Player.HistoryTurn) == 0
+      and #player.room.logic:getEventsOfScope(GameEvent.RespondCard, 1, PlayCheck, Player.HistoryTurn) == 0
     end
   end,
   on_use = function(self, event, target, player, data)
-    if not player.dead then
-      player:drawCards(1,self.name)
-    end
+    player:drawCards(1,self.name)
     return true
   end
 }

@@ -1801,49 +1801,39 @@ local godzhouyu = General(extension, "joy__godzhouyu", "god", 4)
 local qinyin = fk.CreateTriggerSkill{
   name = "joy__qinyin",
   events = {fk.EventPhaseEnd},
-  mute = true,
+  anim_type = "control",
   can_trigger = function(self, event, target, player, data)
     if target == player and player:hasSkill(self) and player.phase == Player.Discard then
-      local x = 0
-      local logic = player.room.logic
-      logic:getEventsOfScope(GameEvent.MoveCards, 1, function (e)
+      return #player.room.logic:getEventsOfScope(GameEvent.MoveCards, 1, function (e)
         for _, move in ipairs(e.data) do
-          if move.from == player.id and move.moveReason == fk.ReasonDiscard and move.skillName == "game_rule" then
-            x = x + #move.moveInfo
-            if x > 0 then return true end
+          if move.from == player.id and move.moveReason == fk.ReasonDiscard then
+            for _, info in ipairs(move.moveInfo) do
+              if info.fromArea == Card.PlayerHand then
+                return true
+              end
+            end
           end
         end
         return false
-      end, Player.HistoryTurn)
-      return x > 0
+      end, Player.HistoryTurn) > 0
     end
   end,
-  
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local choices = {"loseHp","Alldrawcard1"}
-    if not table.every(room.alive_players, function (p) return not p:isWounded() end) then
+    local choices = {"loseHp", "joy__qinyin_alldraw"}
+    if table.find(room.alive_players, function (p) return p:isWounded() end) then
       table.insert(choices, 1, "recover")
     end
     local choice = room:askForChoice(player, choices, self.name)
-    if choice == "recover" then
-      for _, p in ipairs(room:getAlivePlayers()) do
-        if p:isWounded() then
-          room:recover{
-            who = p,
-            num = 1,
-            recoverBy = player,
-            skillName = self.name
-          }
+    for _, p in ipairs(room:getAlivePlayers()) do
+      if not p.dead then
+        if choice == "loseHp" then
+          room:loseHp(p, 1, self.name)
+        elseif choice == "joy__qinyin_alldraw" then
+          p:drawCards(1, self.name)
+        elseif p:isWounded() then
+          room:recover{ who = p, num = 1, recoverBy = player, skillName = self.name }
         end
-      end
-    elseif choice == "loseHp" then
-      for _, p in ipairs(room:getAlivePlayers()) do
-        if not p.dead then room:loseHp(p, 1, self.name) end
-      end
-    elseif choice == "Alldrawcard1" then
-      for _, p in ipairs(room:getAlivePlayers()) do
-        if not p.dead then room:drawCards(p, 1, self.name) end
       end
     end
   end,
@@ -1853,8 +1843,7 @@ local yeyan = fk.CreateTriggerSkill{
   anim_type = "offensive",
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self) and
-      player.phase == Player.Start 
+    return target == player and player:hasSkill(self) and player.phase == Player.Play
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
@@ -1884,10 +1873,10 @@ Fk:loadTranslationTable{
   ["joy__qinyin"] = "琴音",
   [":joy__qinyin"] = "弃牌阶段结束时，若你此阶段弃置过至少一张手牌，你可以选择：1. 令所有角色各回复1点体力；2. 令所有角色各失去1点体力。3.令所有角色各摸一张牌",
   ["joy__yeyan"] = "业炎",
-  [":joy__yeyan"] = "出牌阶段开始时，你可以选择一名其他角色对其造成1点火焰伤害。",
-  ["#joy__yeyan-choose"] = "业炎：选择1名其他角色对其造成1点火焰伤害",
+  [":joy__yeyan"] = "出牌阶段开始时，你可以对一名其他角色造成1点火焰伤害。",
+  ["#joy__yeyan-choose"] = "业炎：你可以对一名其他角色造成1点火焰伤害",
 
-  ["Alldrawcard1"] = "各摸一张牌"
+  ["joy__qinyin_alldraw"] = "各摸一张牌"
 }
 
 local godcaocao = General(extension, "joy__godcaocao", "god", 3)
@@ -1991,31 +1980,31 @@ local shelie = fk.CreateTriggerSkill{
 }
 local gongxin = fk.CreateTriggerSkill{
   name = "joy__gongxin",
-  events = {fk.TargetSpecified},
+  events = {fk.TargetSpecified, fk.TargetConfirmed},
   can_trigger = function(self, event, target, player, data)
-    local to = player.room:getPlayerById(data.to)
-    if player:hasSkill(self) and data.firstTarget and #AimGroup:getAllTargets(data.tos) == 1 and
-      not to:isNude() and player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 then
-      return to == player or (to ~= player and target == player)
+    if player == target and player:hasSkill(self)
+    and player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and #AimGroup:getAllTargets(data.tos) == 1 then
+      local to = (event == fk.TargetSpecified) and data.to or data.from
+      if to and to ~= player.id and not player.room:getPlayerById(to):isKongcheng() then
+        self.cost_data = to
+        return true
+      end
     end
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local to = room:getPlayerById(data.to)
-    local p = target
-    if target == player then
-      p = to
-    end
-    player:broadcastSkillInvoke(self.name)
-    local cards = p.player_cards[p.Hand]
+    local to = room:getPlayerById(self.cost_data)
+    local cards = to.player_cards[Player.Hand]
     local red = table.filter(cards, function (id) return Fk:getCardById(id).color == Card.Red end)
-    local ids, choice = U.askforChooseCardsAndChoice(player, red, {"gongxin_obtaincard", "gongxin_put"},
-    self.name, "#joy__gongxin-view::" .. p.id, {"Cancel"}, 1, 1, cards)
-    local card = ids[1]
-    if choice == "gongxin_obtaincard" then
-      room:obtainCard(player,card,true,fk.ReasonPrey)
-    elseif choice == "gongxin_put" then
-      room:moveCardTo(ids, Card.DrawPile, nil, fk.ReasonPut, self.name, nil, true)
+    local ids, choice = U.askforChooseCardsAndChoice(player, red, {"joy__gongxin_obtaincard", "gongxin_put"},
+    self.name, "#joy__gongxin-view", {"Cancel"}, 1, 1, cards)
+    if #ids > 0 then
+      player:showCards(ids)
+      if choice == "joy__gongxin_obtaincard" then
+        room:moveCardTo(ids, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, true, player.id)
+      else
+        room:moveCardTo(ids, Card.DrawPile, nil, fk.ReasonPut, self.name, nil, true)
+      end
     end
   end,
 }
@@ -2027,11 +2016,10 @@ Fk:loadTranslationTable{
   ["joy__shelie"] = "涉猎",
   [":joy__shelie"] = "锁定技，摸牌阶段，你改为亮出牌堆顶五张牌，获得不同花色的牌各一张。",
   ["joy__gongxin"] = "攻心",
-  [":joy__gongxin"] = "当你使用牌指定唯一目标或成为其他角色使用牌的唯一目标后，你可以观看一名其他角色的手牌并可以展示其中的一张红色牌，"..
-  "选择：1. 弃置此牌；2. 将此牌置于牌堆顶。",
+  [":joy__gongxin"] = "每回合限一次，每当你使用牌指定其他角色为唯一目标后，或你成为其他角色使用牌的唯一目标后，你可以观看该角色的手牌并可以展示其中的一张红色牌，你获得此牌或将之置于牌堆顶。",
   ["#joy__gongxin-active"] = "是否发动 攻心，观看%dest的手牌",
-  ["#joy__gongxin-view"] = "攻心：观看%dest的手牌",
-  ["gongxin_obtaincard"] = "获得此牌",
+  ["#joy__gongxin-view"] = "攻心：可以选择一张红色牌",
+  ["joy__gongxin_obtaincard"] = "获得此牌",
 
 }
 

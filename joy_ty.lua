@@ -879,9 +879,8 @@ Fk:loadTranslationTable{
   ["#joy__sunru"] = "呦呦鹿鸣",
 
   ["joy__xiecui"] = "撷翠",
-  [":joy__xiecui"] = "有角色在自己回合内使用牌首次造成伤害时，你可令此伤害+1。若该角色手牌数大于等于体力值，其获得此伤害牌且本回合手牌上限+1。",
+  [":joy__xiecui"] = "每当一名角色于其回合内使用牌首次造成伤害时，你可令此伤害+1。若该角色手牌数大于等于体力值，其获得此伤害牌且本回合手牌上限+1。",
   ["#joy__xiecui-invoke"] = "撷翠：你可以令 %src 对 %dest造成的伤害+1",
-
 }
 
 local sunyi = General(extension, "joy__sunyi", "wu", 5)
@@ -896,8 +895,7 @@ local xiongyis = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     local prompt = "#xiongyis1-invoke:::"..tostring(math.min(3, player.maxHp))
     if table.find(player.room.alive_players, function(p)
-      return Fk.generals[p.general].trueName == "joy__xushi"
-      or (Fk.generals[p.deputyGeneral] and Fk.generals[p.deputyGeneral].trueName == "joy__xushi") end)
+      return p.general == "joy__xushi" or p.deputyGeneral == "joy__xushi" end)
     then
       prompt = "#xiongyis2-invoke"
     end
