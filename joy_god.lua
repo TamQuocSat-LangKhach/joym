@@ -1901,31 +1901,21 @@ local guixin = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local get = {}
     room:doIndicate(player.id, table.map(room.alive_players, Util.IdMapper))
     local choises = {"$Hand","$Equip","$Judge"}
     local choice = room:askForChoice(player,choises,self.name,"#joy__guixin-choose")
-    local z = "hej"
-    if choice == "$Hand" then
-        z = "h"
-    elseif choice == "$Equip" then
-        z = "e"
-    elseif choice == "$Judge" then
-        z = "j"
-    end
-    for _, p in ipairs(room:getOtherPlayers(player, true)) do
-      if #p:getCardIds(z) ~= 0 then
-        local id = table.random(p:getCardIds(z))
-        room:obtainCard(player, id, false, fk.ReasonPrey)
-        table.insert(get, id)
-      elseif not p:isAllNude() then
-        local id = table.random(p:getCardIds("hej"))
-        room:obtainCard(player, id, false, fk.ReasonPrey)
-        table.insert(get, id)
+    local area = table.indexOf(choises, choice)
+    local n = 0
+    for _, p in ipairs(room:getOtherPlayers(player)) do
+      if player.dead then break end
+      local cards = p.player_cards[area]
+      if #cards == 0 then cards = p:getCardIds("hej") end
+      if #cards > 0 then
+        n = n + 1
+        room:obtainCard(player, table.random(cards), false, fk.ReasonPrey)
       end
-      if player.dead then return false end
     end
-    if player.faceup and #get > 4 then
+    if not player.dead and player.faceup and n > 4 then
       player:turnOver()
     end
   end,
@@ -1937,9 +1927,8 @@ Fk:loadTranslationTable{
   ["#joy__godcaocao"] = "超世之英杰",
 
   ["joy__guixin"] = "归心",
-  [":joy__guixin"] = "当你受到1点伤害后，你可随机获得所有其他角色区域中的一张牌，如果获得牌大于4张且你为正面，你翻面。",
+  [":joy__guixin"] = "当你受到1点伤害后，你可随机获得所有其他角色区域中的一张牌（你选择优先获得牌的区域），如果获得牌大于4张且你为正面，你翻面。",
   ["#joy__guixin-choose"] = "归心:请选择优先获取的区域",
-
 }
 
 local godlvmeng = General(extension, "joy__godlvmeng", "god", 3)
