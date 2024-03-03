@@ -242,7 +242,7 @@ local joy__huxiao = fk.CreateTriggerSkill{
     player.room:setPlayerMark(data.to, "@@joy__huxiao-turn", mark)
   end,
 }
-local ol__huxiao_targetmod = fk.CreateTargetModSkill{
+local joy__huxiao_targetmod = fk.CreateTargetModSkill{
   name = "#joy__huxiao_targetmod",
   bypass_times = function(self, player, skill, scope, card, to)
     return table.contains(U.getMark(to, "@@joy__huxiao-turn"), player.id)
@@ -1312,6 +1312,95 @@ Fk:loadTranslationTable{
 
   ["#joy__juesi-discard"] = "决死：你需弃置一张牌，若不为【杀】且 %src 体力值小于等于你，其可摸两张牌，若为【杀】，视为其对你使用【决斗】",
   ["#joy__juesi-drawCards"] = "决死：是否摸两张牌",
+
+}
+
+local diaochan = General(extension, "joysp__diaochan", "qun", 3, 3, General.Female)
+local lihun = fk.CreateActiveSkill{
+  name = "joy__lihun",
+  mute = true,
+  target_num = 1,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 
+  end,
+  target_filter = function(self, to_select, selected, cards)
+    local target = Fk:currentRoom():getPlayerById(to_select)
+    return #selected == 0 and
+    not target:isKongcheng() and to_select ~= Self.id
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    player:broadcastSkillInvoke(self.name, 1)
+    room:notifySkillInvoked(player, self.name, "control")
+    local mark = player:getMark("joy__lihun-phase")
+    if mark == 0 then mark = {} end
+    table.insertIfNeed(mark, target.id)
+    room:setPlayerMark(player, "joy__lihun-phase", mark)
+    player:turnOver()
+    if player.dead or target.dead or target:isKongcheng() then return end
+    local dummy = Fk:cloneCard("dilu")
+    dummy:addSubcards(target:getCardIds("h"))
+    room:moveCardTo(dummy, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, false, player.id)
+  end,
+}
+local lihun_record = fk.CreateTriggerSkill{
+  name = "#joy__lihun_record",
+  mute = true,
+  events = {fk.EventPhaseEnd},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player.phase == Player.Play and player:getMark("joy__lihun-phase") ~= 0
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke("joy__lihun", 2)
+    room:notifySkillInvoked(player, "joy__lihun", "control")
+    local mark = player:getMark("joy__lihun-phase")
+    for _, id in ipairs(mark) do
+      if player.dead or player:isNude() then return end
+      local to = room:getPlayerById(id)
+      if not to.dead then
+        local cards = player:getCardIds("he")
+        local n = to.hp
+        if n < #cards then
+          cards = room:askForCard(player, n, n, true, "joy__lihun", false, ".", "#lihun-give::"..to.id..":"..n)
+        end
+        room:moveCardTo(cards, Card.PlayerHand, to, fk.ReasonGive, "joy__lihun", nil, false, player.id)
+      end
+    end
+  end,
+}
+local biyue = fk.CreateTriggerSkill{
+  name = "joysp__biyue",
+  anim_type = "drawcard",
+  events = {fk.TurnEnd},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) 
+  end,
+  on_use = function(self, event, target, player, data)
+    local n = 1
+    if not player.faceup then
+      n = 3
+    end
+    player:drawCards(n, self.name)
+  end,
+}
+lihun:addRelatedSkill(lihun_record)
+diaochan:addSkill(lihun)
+diaochan:addSkill(biyue)
+Fk:loadTranslationTable{
+  ["joysp__diaochan"] = "貂蝉",
+  ["#joysp__diaochan"] = "暗黑的傀儡师",
+
+  ["joy__lihun"] = "离魂",
+  [":joy__lihun"] = "出牌阶段限一次，你可翻面，并获得一名其他角色所有手牌。"..
+  "出牌阶段结束时，你交给该角色X张牌（X为其体力值）。",
+  ["joysp__biyue"] = "闭月",
+  [":joysp__biyue"] = "回合结束阶段开始时，你可以摸一张牌，如你处于翻面状态，则摸三张牌。",
 
 }
 

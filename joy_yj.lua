@@ -670,4 +670,210 @@ Fk:loadTranslationTable{
 
 }
 
+local xushi = General(extension, "joy__xushi", "wu", 3, 3, General.Female)
+local wengua = fk.CreateActiveSkill{
+  name = "joy__wengua",
+  anim_type = "support",
+  card_num = 1,
+  target_num = 0,
+  prompt = "#wengua",
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isNude()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local choices = {"Cancel", "Top", "Bottom"}
+    local id = effect.cards[1]
+    local card = Fk:getCardById(id)
+    player:showCards(id)
+    if card.type == Card.TypeTrick then
+      if player.maxHp < 5 then
+        room:changeMaxHp(player, 1)
+      end
+      if player:isWounded() then
+        player.room:recover({
+          who = player,
+          num = 1,
+          recoverBy = player,
+          skillName = self.name
+          })
+      end
+    end
+    local choice = room:askForChoice(player, choices, self.name,
+      "#wengua-choice::"..player.id..":"..Fk:getCardById(effect.cards[1]):toLogString())
+    if choice == "Cancel" then return end
+    local index = 1
+    if choice == "Bottom" then
+      index = -1
+    end
+    room:moveCards({
+      ids = effect.cards,
+      from = player.id,
+      toArea = Card.DrawPile,
+      moveReason = fk.ReasonJustMove,
+      skillName = self.name,
+      drawPilePosition = index,
+    })
+    if player.dead then return end
+    if choice == "Top" then
+      player:drawCards(1, self.name, "bottom")
+      if not player.dead then
+        player:drawCards(1, self.name, "bottom")
+      end
+    else
+      player:drawCards(1, self.name)
+      if not player.dead then
+        player:drawCards(1, self.name)
+      end
+    end
+  end,
+}
+local wengua_trigger = fk.CreateTriggerSkill{
+  name = "#joy__wengua_trigger",
+
+  refresh_events = {fk.GameStart, fk.EventAcquireSkill, fk.EventLoseSkill, fk.Deathed},
+  can_refresh = function(self, event, target, player, data)
+    if event == fk.GameStart then
+      return player:hasSkill(self.name, true)
+    elseif event == fk.EventAcquireSkill or event == fk.EventLoseSkill then
+      return data == self and not table.find(player.room:getOtherPlayers(player), function(p) return p:hasSkill("joy__wengua", true) end)
+    else
+      return target == player and player:hasSkill(self.name, true, true) and
+        not table.find(player.room:getOtherPlayers(player), function(p) return p:hasSkill("joy__wengua", true) end)
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.GameStart or event == fk.EventAcquireSkill then
+      if player:hasSkill(self.name, true) then
+        for _, p in ipairs(room:getOtherPlayers(player)) do
+          room:handleAddLoseSkills(p, "joy__wengua&", nil, false, true)
+        end
+      end
+    elseif event == fk.EventLoseSkill or event == fk.Deathed then
+      for _, p in ipairs(room:getOtherPlayers(player)) do
+        room:handleAddLoseSkills(p, "-joy__wengua&", nil, false, true)
+      end
+    end
+  end,
+}
+local wengua_active = fk.CreateActiveSkill{
+  name = "joy__wengua&",
+  anim_type = "support",
+  card_num = 1,
+  target_num = 1,
+  prompt = "#wengua&",
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isKongcheng()
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0
+  end,
+  target_filter = function(self, to_select, selected)
+    return #selected == 0 and to_select ~= Self.id and Fk:currentRoom():getPlayerById(to_select):hasSkill("joy__wengua")
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    local id = effect.cards[1]
+    local card = Fk:getCardById(id)
+    player:showCards(id)
+    room:obtainCard(target.id, id, false, fk.ReasonGive)
+    if card.type == Card.TypeTrick then
+      if target.maxHp < 5 then
+        room:changeMaxHp(target, 1)
+      end
+      if target:isWounded() then
+        target.room:recover({
+          who = target,
+          num = 1,
+          recoverBy = target,
+          skillName = self.name
+          })
+      end
+    end
+    if room:getCardOwner(id) ~= target or room:getCardArea(id) ~= Card.PlayerHand then return end
+    local choices = {"Cancel", "Top", "Bottom"}
+    local choice = room:askForChoice(target, choices, "wengua",
+      "#wengua-choice::"..player.id..":"..Fk:getCardById(id):toLogString())
+    if choice == "Cancel" then return end
+    local index = 1
+    if choice == "Bottom" then
+      index = -1
+    end
+    room:moveCards({
+      ids = effect.cards,
+      from = target.id,
+      toArea = Card.DrawPile,
+      moveReason = fk.ReasonJustMove,
+      skillName = "wengua",
+      drawPilePosition = index,
+    })
+    if player.dead then return end
+    if choice == "Top" then
+      player:drawCards(1, "wengua", "bottom")
+      if not target.dead then
+        target:drawCards(1, "wengua", "bottom")
+      end
+    else
+      player:drawCards(1, "wengua")
+      if not target.dead then
+        target:drawCards(1, "wengua")
+      end
+    end
+  end,
+}
+local fuzhu = fk.CreateTriggerSkill{
+  name = "joy__fuzhu",
+  anim_type = "offensive",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target ~= player and target.phase == Player.Finish and
+        #player.room.draw_pile <= 10 * player.maxHp
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#fuzhu-invoke::"..target.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:doIndicate(player.id, {target.id})
+    local n = 0
+    local cards = table.simpleClone(room.draw_pile)
+    for _, id in ipairs(cards) do
+      local card = Fk:getCardById(id, true)
+      if card.trueName == "slash" then
+        room:useCard({
+          from = player.id,
+          tos = {{target.id}},
+          card = card,
+        })
+        n = n + 1
+      end
+      if n >= #room.players or player.dead or target.dead then
+        break
+      end
+    end
+    room:shuffleDrawPile()
+  end,
+}
+Fk:addSkill(wengua_active)
+wengua:addRelatedSkill(wengua_trigger)
+xushi:addSkill(wengua)
+xushi:addSkill(fuzhu)
+Fk:loadTranslationTable{
+  ["joy__xushi"] = "徐氏",
+  ["joy__wengua"] = "问卦",
+  [":joy__wengua"] = "每名角色出牌阶段限一次，其可以交给你一张牌并展示，若该牌为锦囊牌，则你加一点体力上限（不会超过5）并回复一点体力,"..
+  "然后你可以将此牌置于牌堆顶或牌堆底，你与其从另一端摸一张牌。",
+  ["joy__fuzhu"] = "伏诛",
+  [":joy__fuzhu"] = "一名角色结束阶段，若牌堆剩余牌数不大于你体力值的十倍，你可以依次对其使用牌堆中所有的【杀】（不能超过游戏人数），然后洗牌。",
+  ["#joy__wengua"] = "问卦：你可以将一张牌置于牌堆顶或牌堆底，从另一端摸两张牌",
+  ["joy__wengua&"] = "问卦",
+  [":joy__wengua&"] = "出牌阶段限一次，你可以交给徐氏一张牌并展示之，若该牌为锦囊牌，则其加一点体力上限（不会超过5）并回复一点体力,"..
+  "然后其可以将此牌置于牌堆顶或牌堆底，其与你从另一端摸一张牌。",
+}
+
 return extension

@@ -22,10 +22,17 @@ local yajiao = fk.CreateTriggerSkill{
       end
     end
   end,
+  on_cost = function(self,event,target,player,data)
+    if event == fk.EventPhaseStart then
+      return true
+    else
+      return player.room:askForSkillInvoke(player,self.name,data)
+    end
+  end,
   on_use = function(self, event, target, player, data)
     local room = player.room
     if event == fk.EventPhaseStart then
-      player:drawCards(player:usedSkillTimes("ex__longdan", Player.HistoryTurn) ,self.name)
+      player:drawCards(1 ,self.name)
     else
       local cards = room:getNCards(1)
       player:showCards(cards)
@@ -45,6 +52,7 @@ Fk:loadTranslationTable{
   [":joyex__yajiao"] = "每当你于回合外使用或打出手牌时，你可以展示牌堆顶一张牌并交给一名角色；结束阶段，你于本回合每发动一次【龙胆】，你摸一张牌。",
   ["#joyex__yajiao-choose"] = "涯角: 将 %arg 交给一名角色",
 }
+
 
 
 local huangyueying = General(extension, "joyex__huangyueying", "shu", 3, 3, General.Female)
@@ -473,5 +481,256 @@ Fk:loadTranslationTable{
   ["#joy__shenglun-damage"] = "胜论：对一名角色造成1点伤害",
 }
 
+local joyex__tieji = fk.CreateTriggerSkill{
+  name = "joyex__tieji",
+  anim_type = "offensive",
+  events = {fk.TargetSpecified},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      data.card.trueName == "slash"
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(data.to)
+    room:addPlayerMark(to, "@@joytieji-turn")
+    room:addPlayerMark(to, MarkEnum.UncompulsoryInvalidity .. "-turn")
+    local judge = {
+      who = player,
+      reason = self.name,
+      pattern = ".",
+    }
+    room:judge(judge)
+    if judge.card.color == Card.Red then
+      data.disresponsive = true
+    elseif judge.card.color == Card.Black then
+      if not player.dead then
+      player:drawCards(2, self.name)
+      end
+    end
+  end,
+}
+
+local joyex__machao = General:new(extension, "joyex__machao", "shu", 4)
+joyex__machao:addSkill("joy__yuma")
+joyex__machao:addSkill(joyex__tieji)
+Fk:loadTranslationTable{
+  ["joyex__machao"] = "界马超",
+  ["joyex__tieji"] = "铁骑",
+  [":joyex__tieji"] = "当你使用【杀】指定目标后，你可令其本回合非锁定技失效，然后你进行判定，若为红色，该角色不能使用【闪】；黑色，你摸两张牌。",
+  ["joyex__tieji_invalidity"] = "铁骑",
+  ["@@joytieji-turn"] = "铁骑",
+}
+
+local caocao = General:new(extension, "joyex__caocao", "wei", 4)
+local jianxiong = fk.CreateTriggerSkill{
+  name = "joyex__jianxiong",
+  anim_type = "masochism",
+  events = {fk.Damaged},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self)  then
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local choices = {"drawCards1","drawCards2"}
+    local choice = player.room:askForChoice(player,choices,self.name)
+    if choice == "drawCards1" and not player.dead then
+      if data.card and target.room:getCardArea(data.card) == Card.Processing then
+        player.room:obtainCard(player.id, data.card, true, fk.ReasonJustMove)
+      end
+      player.room:drawCards(player,1,self.name)
+    elseif not player.dead then
+      player.room:drawCards(player,2,self.name)
+    end
+    
+  end,
+}
+
+local hujia = fk.CreateTriggerSkill{
+  name = "joyex__hujia$",
+  anim_type = "defensive",
+  events = {fk.AskForCardUse, fk.AskForCardResponse},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      (data.cardName == "jink" or (data.pattern and Exppattern:Parse(data.pattern):matchExp("jink|0|nosuit|none"))) and
+      (data.extraData == nil or data.extraData.hujia_ask == nil) and
+      not table.every(player.room.alive_players, function(p)
+        return p == player or p.kingdom ~= "wei"
+      end)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    for _, p in ipairs(room:getOtherPlayers(player)) do
+      if p:isAlive() and p.kingdom == "wei" then
+        local cardResponded = room:askForResponse(p, "jink", "jink", "#joyex__hujia-ask:" .. player.id, true, {hujia_ask = true})
+        if cardResponded then
+          room:responseCard({
+            from = p.id,
+            card = cardResponded,
+            skipDrop = true,
+          })
+
+          if event == fk.AskForCardUse then
+            data.result = {
+              from = player.id,
+              card = Fk:cloneCard('jink'),
+            }
+            data.result.card:addSubcards(room:getSubcardsByRule(cardResponded, { Card.Processing }))
+            data.result.card.skillName = self.name
+
+            if data.eventData then
+              data.result.toCard = data.eventData.toCard
+              data.result.responseToEvent = data.eventData.responseToEvent
+            end
+          else
+            data.result = Fk:cloneCard('jink')
+            data.result:addSubcards(room:getSubcardsByRule(cardResponded, { Card.Processing }))
+            data.result.skillName = self.name
+          end
+            if player:getMark("joyex__hujia-turn") == 0 then
+              if p.room:askForSkillInvoke(p,self.name,nil,"#joyex__hujia-drawcard:" .. player.id) and not player.dead then
+                player.room:drawCards(player,1,self.name)
+                player.room:setPlayerMark(player,"joyex__hujia-turn",1)
+              end
+            end
+          return true
+        end
+      end
+    end
+  end,
+}
+
+
+caocao:addSkill(jianxiong)
+caocao:addSkill(hujia)
+Fk:loadTranslationTable{
+  ["joyex__caocao"] = "界曹操",
+
+  ["joyex__jianxiong"] = "奸雄",
+  [":joyex__jianxiong"] = "当你每受到1点伤害后，你可以摸一张牌并获得对你造成伤害的牌；或摸两张牌",
+  ["joyex__hujia"] = "护驾",
+  [":joyex__hujia"] = "主公技，其他魏势力角色可以替你使用或打出【闪】。"..
+  "其他魏势力角色若以此法使用或打出【闪】时，可以令你摸一张牌，每回合限一张。",
+
+  ["drawCards1"] = "奸雄：摸一张牌并获得对你造成伤害的牌",
+  ["drawCards2"] = "奸雄：摸两张牌",
+
+  ["#joyex__hujia-ask"] = "护驾:是否为 %src 打出一张闪,若打出可令其摸一张牌(每回合限一张)。",
+  ["#joyex__hujia-drawcard"] = "护驾:是否令 %src 摸一张牌？"
+
+}
+
+local huanggai = General(extension, "joyex__huanggai", "wu", 4)
+local zhaxiang_targetmod = fk.CreateTargetModSkill{
+  name = "#joyex__zhaxiang_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:hasSkill(self) then
+      return 1
+    end
+    return 0
+  end,
+  distance_limit_func =  function(self, player, skill, card)
+    if skill.trueName == "slash_skill" and card.color == Card.Red and player:hasSkill(self) then
+      return 999
+    end
+  end,
+}
+local zhaxiang = fk.CreateTriggerSkill{
+  name = "joyex__zhaxiang",
+  mute = true,
+  frequency = Skill.Compulsory,
+  events = {fk.TargetSpecified},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      data.card.trueName == "slash" and data.card.color == Card.Red
+  end,
+  on_use = function(self, event, target, player, data)
+    data.disresponsive = true
+  end,
+}
+zhaxiang:addRelatedSkill(zhaxiang_targetmod)
+huanggai:addSkill("kurou")
+huanggai:addSkill(zhaxiang)
+Fk:loadTranslationTable{
+  ["joyex__huanggai"] = "界黄盖",
+  ["joyex__zhaxiang"] = "诈降",
+  [":joyex__zhaxiang"] = "锁定技，你使用【杀】次数上限+1、使用红色【杀】无距离限制且不可被响应。",
+ 
+}
+
+local lvmeng = General(extension, "joyex__lvmeng", "wu", 4)
+local keji = fk.CreateTriggerSkill{
+  name = "joy__keji",
+  anim_type = "defensive",
+  events = {fk.EventPhaseChanging},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) and data.to == Player.Discard then
+      local room = player.room
+      local logic = room.logic
+      local e = logic:getCurrentEvent():findParent(GameEvent.Turn, true)
+      if e == nil then return false end
+      local end_id = e.id
+      local events = logic.event_recorder[GameEvent.UseCard] or Util.DummyTable
+      for i = #events, 1, -1 do
+        e = events[i]
+        if e.id <= end_id then break end
+        local use = e.data[1]
+        if use.from == player.id and use.card.trueName == "slash" then
+          return false
+        end
+      end
+      events = logic.event_recorder[GameEvent.RespondCard] or Util.DummyTable
+      for i = #events, 1, -1 do
+        e = events[i]
+        if e.id <= end_id then break end
+        local resp = e.data[1]
+        if resp.from == player.id and resp.card.trueName == "slash" then
+          return false
+        end
+      end
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    if not player.dead then
+      player:drawCards(1,self.name)
+    end
+    return true
+  end
+}
+local qinxue = fk.CreateTriggerSkill{
+  name = "joyex__qinxue",
+  frequency = Skill.Wake,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      player.phase == Player.Finish and
+      player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  can_wake = function(self, event, target, player, data)
+    return #player.player_cards[Player.Hand] >= player.hp*3
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if player:isWounded() then
+      local n = player.maxHp - player.hp
+      room:changeMaxHp(player, -n)
+    end
+    room:handleAddLoseSkills(player, "-joy__keji", nil)
+    room:handleAddLoseSkills(player, "joy__gongxin", nil)
+  end,
+}
+lvmeng:addSkill(keji)
+lvmeng:addSkill(qinxue)
+lvmeng:addRelatedSkill("joy__gongxin")
+Fk:loadTranslationTable{
+  ["joyex__lvmeng"] = "界吕蒙",
+
+  ["joy__keji"] = "克己",
+  [":joy__keji"] = "若你未于出牌阶段内打出或使用过【杀】，你可以跳过弃牌阶段并摸一张牌。",
+  ["joyex__qinxue"] = "勤学",
+  [":joyex__qinxue"] = "觉醒技，结束阶段，若你的手牌数大于等于体力值的3倍，你将体力上限减少至当前体力值，然后获得技能〖攻心〗失去〖克己〗。",
+
+}
 
 return extension

@@ -738,4 +738,150 @@ Fk:loadTranslationTable{
 
 }
 
+local sunce = General(extension, "joyex__sunce", "wu", 4)
+local jiang = fk.CreateTriggerSkill{
+  name = "joyex__jiang",
+  anim_type = "drawcard",
+  events ={fk.TargetSpecified, fk.TargetConfirmed},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.firstTarget and
+      (data.card.trueName == "slash"or data.card.name == "duel")
+  end,
+  on_use = function(self, event, target, player, data)
+    player:drawCards(1, self.name)
+  end,
+}
+local hunzi = fk.CreateTriggerSkill{
+  name = "joyex__hunzi",
+  frequency = Skill.Wake,
+  events = {fk.GameStart,fk.HpChanged},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and
+      player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  can_wake = function(self, event, target, player, data)
+    return player.hp == 1
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:changeMaxHp(player, -1)
+    room:handleAddLoseSkills(player, "ex__yingzi|joy__yinghun", nil, true, false)
+  end,
+}
+local yinghun = fk.CreateTriggerSkill{
+  name = "joy__yinghun",
+  anim_type = "control",
+  mute = true,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.phase == Player.Start
+  end,
+  on_cost = function(self, event, target, player, data)
+    local to
+    if player:getLostHp() > 0 then
+      to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__yinghun-discard:::"..player:getLostHp(), self.name, true)
+    else
+      to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__yinghun-drawcard", self.name, true)
+    end
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function (self,event,target,player,data)
+    local p = player.room:getPlayerById(self.cost_data)
+    if not p.dead then
+      player.room:drawCards(p,1,self.name)
+    end
+    if not p.dead and player:getLostHp() > 0 then
+      player.room:askForDiscard(p,player:getLostHp(),player:getLostHp())
+    end
+  end
+}
+local zhiba = fk.CreateTriggerSkill{
+  name = "joyex__zhiba$",
+  mute = true,
+  refresh_events = {fk.EventAcquireSkill, fk.EventLoseSkill, fk.BuryVictim, fk.AfterPropertyChange},
+  can_refresh = function(self, event, target, player, data)
+    if event == fk.EventAcquireSkill or event == fk.EventLoseSkill then
+      return data == self
+    elseif event == fk.BuryVictim then
+      return target:hasSkill(self, true, true)
+    elseif event == fk.AfterPropertyChange then
+      return target == player
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    local attached_huangtian = player.kingdom == "wu" and table.find(room.alive_players, function (p)
+      return p ~= player and p:hasSkill(self, true)
+    end)
+    if attached_huangtian and not player:hasSkill("joyex__zhiba_other&", true, true) then
+      room:handleAddLoseSkills(player, "joyex__zhiba_other&", nil, false, true)
+    elseif not attached_huangtian and player:hasSkill("joyex__zhiba_other&", true, true) then
+      room:handleAddLoseSkills(player, "-joyex__zhiba_other&", nil, false, true)
+    end
+  end,
+}
+local zhiba_other = fk.CreateActiveSkill{
+  name = "joyex__zhiba_other&",
+  anim_type = "support",
+  prompt = "#joyex__zhiba-active",
+  mute = true,
+  can_use = function(self, player)
+    if player:usedSkillTimes(self.name, Player.HistoryPhase) < 1 and player.kingdom == "wu" then
+      return table.find(Fk:currentRoom().alive_players, function(p) return p:hasSkill("joyex__zhiba") and p ~= player end)
+    end
+    return false
+  end,
+  card_num = 1,
+  card_filter = function(self, to_select, selected)
+    return #selected < 1 and (Fk:getCardById(to_select).name == "slash" or Fk:getCardById(to_select).name == "duel")
+  end,
+  target_num = 0,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local targets = table.filter(room.alive_players, function(p) return p:hasSkill("joyex__zhiba") and p ~= player end)
+    local target
+    if #targets == 1 then
+      target = targets[1]
+    else
+      target = room:getPlayerById(room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, nil, self.name, false)[1])
+    end
+    if not target then return false end
+    room:notifySkillInvoked(player, "joyex__zhiba")
+    player:broadcastSkillInvoke("joyex__zhiba")
+    room:doIndicate(effect.from, { target.id })
+    room:moveCardTo(effect.cards, Player.Hand, target, fk.ReasonGive, self.name, nil, true)
+  end,
+}
+sunce:addSkill(jiang)
+sunce:addSkill(hunzi)
+sunce:addRelatedSkill("ex__yingzi")
+sunce:addRelatedSkill(yinghun)
+sunce:addSkill(zhiba)
+Fk:addSkill(zhiba_other)
+Fk:loadTranslationTable{
+  ["joyex__sunce"] = "界孙策",
+  ["#joyex__sunce"] = "江东的小霸王",
+  ["joyex__jiang"] = "激昂",
+  [":joyex__jiang"] = "当你使用【决斗】或【杀】指定目标后，或成为【决斗】或【杀】的目标后，你可以摸一张牌。",
+  ["joyex__hunzi"] = "魂姿",
+  [":joyex__hunzi"] = "觉醒技，当你的体力值为1时，你减1点体力上限，然后获得〖英姿〗和〖英魂〗。",
+  ["joyex__zhiba"] = "制霸",
+  [":joyex__zhiba"] = "主公技，其他吴势力角色的出牌阶段限一次，其可以交给你一张【杀】或【决斗】。",
+  --抄的标张角主公技
+
+  ["joyex__zhiba_other&"] = "制霸",
+  [":joyex__zhiba_other&"] = "出牌阶段限一次，你可以交给孙策一张【杀】或【决斗】。",
+  ["#joyex__zhiba-active"] = "制霸：你可以交给一名拥有“制霸”的角色一张【杀】或【决斗】。",
+  ["joy__yinghun"] = "英魂",
+  [":joy__yinghun"] = "准备阶段，你可以令一名其他角色摸一张牌，然后弃X张牌（X为你已损失的体力值）",
+
+  ["#joy__yinghun-drawcard"] = "英魂:你可以选择一名其他角色摸一张牌。",
+  ["#joy__yinghun-discard"] = "英魂：你可以选择一名其他角色摸一张牌，然后弃%arg张牌",
+  ["$ex__yingzi_joyex__sunce1"] = "公瑾，助我决一死战！",
+  ["$ex__yingzi_joyex__sunce2"] = "尔等看好了！",
+}
+
 return extension

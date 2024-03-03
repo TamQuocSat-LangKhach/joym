@@ -884,4 +884,85 @@ Fk:loadTranslationTable{
 
 }
 
+local sunyi = General(extension, "joy__sunyi", "wu", 5)
+local xiongyis = fk.CreateTriggerSkill{
+  name = "joy__xiongyis",
+  anim_type = "defensive",
+  frequency = Skill.Limited,
+  events = {fk.AskForPeaches},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.dying and player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    local prompt = "#xiongyis1-invoke:::"..tostring(math.min(3, player.maxHp))
+    if table.find(player.room.alive_players, function(p)
+      return Fk.generals[p.general].trueName == "joy__xushi"
+      or (Fk.generals[p.deputyGeneral] and Fk.generals[p.deputyGeneral].trueName == "joy__xushi") end)
+    then
+      prompt = "#xiongyis2-invoke"
+    end
+    if player.room:askForSkillInvoke(player, self.name, nil, prompt) then
+      self.cost_data = prompt
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local n = tonumber(string.sub(self.cost_data, 10, 10))
+    if n == 1 then
+      local maxHp = player.maxHp
+      room:recover({
+        who = player,
+        num = math.min(3, maxHp) - player.hp,
+        recoverBy = player,
+        skillName = self.name
+      })
+      room:changeHero(player, "joy__xushi", false, false, true, false)
+    else
+      room:recover({
+        who = player,
+        num = 1 - player.hp,
+        recoverBy = player,
+        skillName = self.name
+      })
+      room:handleAddLoseSkills(player, "joy__hunzi", nil, true, false)
+    end
+  end,
+}
+local hunzi = fk.CreateTriggerSkill{
+  name = "joy__hunzi",
+  frequency = Skill.Wake,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      player:usedSkillTimes(self.name, Player.HistoryGame) == 0 and
+      player.phase == Player.Start
+  end,
+  can_wake = function(self, event, target, player, data)
+    return player.hp == 1
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:changeMaxHp(player, -1)
+    room:handleAddLoseSkills(player, "ex__yingzi|joy__yinghun", nil, true, false)
+  end,
+}
+sunyi:addSkill("jiqiaos")
+sunyi:addSkill(xiongyis)
+sunyi:addRelatedSkill(hunzi)
+sunyi:addRelatedSkill("ex__yingzi")
+sunyi:addRelatedSkill("joy__yinghun")
+Fk:loadTranslationTable{
+  ["joy__sunyi"] = "孙翊",
+  ["#joy__sunyi"] = "虓风快意",
+
+  ["joy__xiongyis"] = "凶疑",
+  [":joy__xiongyis"] = "限定技，当你处于濒死状态时，若徐氏：不在场，你可以将体力值回复至3点并将武将牌替换为徐氏；"..
+  "在场，你可以将体力值回复至1点并获得技能〖魂姿〗。",
+  ["joy__hunzi"] = "魂姿",
+  [":joy__hunzi"] = "觉醒技，准备阶段，若你的体力为1，你减一点体力上限，然后获得“英姿”和“英魂”",
+
+  ["$ex__yingzi_joy__sunyi"] = "骁悍果烈，威震江东！",
+}
+
 return extension
