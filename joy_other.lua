@@ -302,6 +302,195 @@ Fk:loadTranslationTable{
   ["$joy__tuantu2"] = "引绳于泥中，举以为人！",
 }
 
+local joy__xiaoshan = General(extension, "joy__xiaoshan", "qun", 3, 3, General.Female)
+
+local joy__shanshan = fk.CreateViewAsSkill{
+  name = "joy__shanshan",
+  anim_type = "defensive",
+  pattern = "jink",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).type == Card.TypeEquip
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return nil end
+    local c = Fk:cloneCard("jink")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+}
+local joy__shanshan_trigger = fk.CreateTriggerSkill{
+  name = "#joy__shanshan_trigger",
+  mute = true,
+  main_skill = joy__shanshan,
+  events = {fk.TargetConfirming},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return data.from ~= player.id and target == player and player:hasSkill(joy__shanshan) and (data.card.trueName == "slash" or data.card:isCommonTrick())
+  end,
+  on_cost = function (self, event, target, player, data)
+    local card = player.room:askForResponse(player, "jink", "jink", "#joy__shanshan-card:::"..data.card:toLogString(), true)
+    if card then
+      self.cost_data = card
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:responseCard{
+      from = player.id,
+      card = self.cost_data,
+    }
+    table.insertIfNeed(data.nullifiedTargets, player.id)
+    if not player.dead then
+      player:drawCards(1, joy__shanshan.name)
+    end
+  end,
+}
+joy__shanshan:addRelatedSkill(joy__shanshan_trigger)
+joy__xiaoshan:addSkill(joy__shanshan)
+
+local joy__anshi = fk.CreateTriggerSkill{
+  name = "joy__anshi",
+  anim_type = "control",
+  events = {fk.RoundStart, fk.CardUsing, fk.CardResponding, fk.AfterCardsMove, fk.TargetSpecifying, fk.RoundEnd},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(self) then return end
+    if event == fk.RoundStart then return true end
+    local mark = player:getMark("@[joy__anshi]joy__anshi-round")
+    if not mark then return end
+    if event == fk.AfterCardsMove then
+      if mark ~= 3 then return end
+      local list = {}
+      for _, move in ipairs(data) do
+        if move.to and move.toArea == Card.PlayerEquip then
+          table.insertIfNeed(list, move.to)
+        end
+        if move.from and table.find(move.moveInfo, function(info) return info.fromArea == Card.PlayerEquip end) then
+          table.insertIfNeed(list, move.from)
+        end
+      end
+      list = table.filter(list, function(pid) return #player.room:getPlayerById(pid).player_cards[Player.Equip] > 0 end)
+      if #list > 0 then
+        player.room:sortPlayersByAction(list)
+        self.cost_data = list
+        return true
+      end
+    elseif event == fk.TargetSpecifying then
+      return mark == 5 and data.card.type == Card.TypeTrick and data.firstTarget
+    elseif event == fk.RoundEnd then
+      return mark == 2
+    else
+      if mark == 1 then
+        return not target.dead and data.card.name == "jink"
+      elseif mark == 4 then
+        return not target.dead and (data.card.name == "peach" or data.card.name == "analeptic")
+        and event == fk.CardUsing
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.RoundStart then
+      local n = math.random(4,5)
+      room:setPlayerMark(player, "@[joy__anshi]joy__anshi-round", n)
+    else
+      local mark = player:getMark("@[joy__anshi]joy__anshi-round")
+      if mark == 1 then
+        target:throwAllCards("h")
+      elseif mark == 2 then
+        local players = table.filter(room:getAlivePlayers(), function (p)
+          return #room.logic:getEventsOfScope(GameEvent.UseCard, 1, function(e)
+            return e.data[1].from == p.id and e.data[1].card.name == "jink"
+          end, Player.HistoryRound) == 0
+          and
+          #room.logic:getEventsOfScope(GameEvent.RespondCard, 1, function(e)
+            return e.data[1].from == p.id and e.data[1].card.name == "jink"
+          end, Player.HistoryRound) == 0
+          and
+          #room.logic:getEventsOfScope(GameEvent.MoveCards, 1, function(e)
+            for _, move in ipairs(e.data) do
+              if move.from == p.id and move.moveReason == fk.ReasonDiscard then
+                for _, info in ipairs(move.moveInfo) do
+                  if (info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerEquip)
+                  and Fk:getCardById(info.cardId).name == "jink" then
+                    return true
+                  end
+                end
+              end
+            end
+          end, Player.HistoryRound) == 0
+        end)
+        for _, p in ipairs(players) do
+          if not p.dead then
+            room:damage { from = nil, to = p, damage = 1, skillName = self.name, damageType = fk.ThunderDamage }
+          end
+        end
+      elseif mark == 3 then
+        for _, pid in ipairs(self.cost_data) do
+          room:getPlayerById(pid):throwAllCards("e")
+        end
+      elseif mark == 4 then
+        room:setPlayerMark(target, "@@joy__anshi_prohibit-turn", 1)
+      elseif mark == 5 then
+        player:drawCards(1, self.name)
+      end
+    end
+  end,
+}
+local joy__anshi_prohibit = fk.CreateProhibitSkill{
+  name = "#joy__anshi_prohibit",
+  prohibit_response = function(self, player, card)
+    if player:getMark("@@joy__anshi_prohibit-turn") > 0 then
+      local subcards = card:isVirtual() and card.subcards or {card.id}
+      return #subcards > 0 and table.every(subcards, function(id)
+        return table.contains(player.player_cards[Player.Hand], id)
+      end)
+    end
+  end,
+  prohibit_use = function(self, player, card)
+    if player:getMark("@@joy__anshi_prohibit-turn") > 0 then
+      local subcards = card:isVirtual() and card.subcards or {card.id}
+      return #subcards > 0 and table.every(subcards, function(id)
+        return table.contains(player.player_cards[Player.Hand], id)
+      end)
+    end
+  end,
+}
+joy__anshi:addRelatedSkill(joy__anshi_prohibit)
+joy__xiaoshan:addSkill(joy__anshi)
+
+-- 临时使用 待 private mark优化后再做处理
+Fk:addQmlMark{
+  name = "joy__anshi",
+  qml_path = "",
+  how_to_show = function(name, value, p)
+    if Self == p then
+      return tostring(value)
+    end
+    return " "
+  end,
+}
+
+Fk:loadTranslationTable{
+  ["joy__xiaoshan"] = "小闪",
+
+  ["joy__shanshan"] = "闪闪",
+  [":joy__shanshan"] = "当你成为其他角色【杀】或普通锦囊的目标时，你可以打出一张【闪】，令此牌对你无效，并摸一张牌。你的装备牌可以当作【闪】使用或打出。",
+  ["#joy__shanshan_trigger"] = "闪闪",
+  ["#joy__shanshan-card"] = "闪闪：你可以打出一张【闪】，令%arg对你无效",
+
+  ["joy__anshi"] = "暗示",
+  [":joy__anshi"] = "锁定枝，每轮开始时，随机选取下列一项效果，于本轮中对每名角色生效（对你可见）："..
+  "<br>①使用或打出【闪】时，弃置所有手牌；"..
+  "<br>②本轮结束时，未使用、打出、弃置过【闪】的角色依次受到1点雷电伤害；"..
+  "<br>③装备区牌数变化后，弃置装备区所有牌；"..
+  "<br>④使用【桃】或【酒】时，本回合不能使用或打出手牌；"..
+  "<br>⑤使用普通锦囊牌指定目标时，你模一张牌。",
+  ["@[joy__anshi]joy__anshi-round"] = "暗示",
+  ["@@joy__anshi_prohibit-turn"] = "暗示封牌",
+}
 
 
 
