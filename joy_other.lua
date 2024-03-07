@@ -393,7 +393,7 @@ local joy__anshi = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     if event == fk.RoundStart then
-      local n = math.random(4,5)
+      local n = math.random(5)
       room:setPlayerMark(player, "@[joy__anshi]joy__anshi-round", n)
     else
       local mark = player:getMark("@[joy__anshi]joy__anshi-round")

@@ -66,7 +66,7 @@ local joyex__jizhi = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     local card = Fk:getCardById(player:drawCards(1)[1])
-    if card.type == Card.TypeBasic and player.phase == Player.Play then
+    if card.type == Card.TypeBasic then
       room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, 1)
     elseif card.type == Card.TypeEquip and room:getCardOwner(card) == player and room:getCardArea(card) == Player.Hand then
       local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
@@ -85,18 +85,8 @@ local joyex__jizhi = fk.CreateTriggerSkill{
         })
       end
     elseif card.type == Card.TypeTrick and player.phase == Player.Play then
-      room:addPlayerMark(player, "joyex__jizhi-phase", 1)
+      room:addPlayerMark(player, MarkEnum.SlashResidue.."-phase", 1)
     end
-  end,
-}
-local joyex__jizhi_targetmod = fk.CreateTargetModSkill{
-  name = "#joyex__jizhi_targetmod",
-  main_skill = joyex__jizhi,
-  residue_func = function(self, player, skill, scope)
-    if skill.trueName == "slash_skill" and player:getMark("joyex__jizhi-phase") > 0 and scope == Player.HistoryPhase then
-      return player:getMark("joyex__jizhi-phase")
-    end
-    return 0
   end,
 }
 local joyex__qicai = fk.CreateTriggerSkill{
@@ -152,7 +142,6 @@ local joyex__qicai_targetmod = fk.CreateTargetModSkill{
     return player:hasSkill("joyex__qicai") and card and card.type == Card.TypeTrick
   end,
 }
-joyex__jizhi:addRelatedSkill(joyex__jizhi_targetmod)
 joyex__qicai:addRelatedSkill(joyex__qicai_targetmod)
 huangyueying:addSkill(joyex__jizhi)
 huangyueying:addSkill(joyex__qicai)
@@ -179,7 +168,8 @@ local joyex__lijian = fk.CreateActiveSkill{
   card_filter = function(self, to_select, selected)
     return #selected == 0 and not Self:prohibitDiscard(Fk:getCardById(to_select))
   end,
-  target_filter = function(self, to_select, selected)
+  target_filter = function(self, to_select, selected, cards)
+    if #cards ~= 1 then return false end
     local target = Fk:currentRoom():getPlayerById(to_select)
     if target:getMark("joyex__lijian-turn") == 0 then
       if #selected == 0 then
@@ -194,10 +184,17 @@ local joyex__lijian = fk.CreateActiveSkill{
   on_use = function(self, room, effect)
     local player = room:getPlayerById(effect.from)
     room:throwCard(effect.cards, self.name, player, player)
-    for _, id in ipairs(effect.tos) do
-      room:setPlayerMark(room:getPlayerById(id), "joyex__lijian-turn", 1)
-    end
     room:useVirtualCard("duel", nil, room:getPlayerById(effect.tos[2]), room:getPlayerById(effect.tos[1]), self.name)
+  end,
+}
+local joyex__lijian_trigger = fk.CreateTriggerSkill{
+  name = "#joyex__lijian_trigger",
+  refresh_events = {fk.PreDamage},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and data.card and table.contains(data.card.skillNames, joyex__lijian.name)
+  end,
+  on_refresh = function(self, event, target, player, data)
+    player.room:setPlayerMark(data.to, "joyex__lijian-turn", 1)
   end,
 }
 local joyex__biyue = fk.CreateTriggerSkill{
@@ -214,22 +211,17 @@ local joyex__biyue = fk.CreateTriggerSkill{
     player:drawCards(1 + player:usedSkillTimes("joyex__lijian", Player.HistoryTurn), self.name)
   end,
 }
+joyex__lijian:addRelatedSkill(joyex__lijian_trigger)
 diaochan:addSkill(joyex__lijian)
 diaochan:addSkill(joyex__biyue)
 Fk:loadTranslationTable{
   ["joyex__diaochan"] = "界貂蝉",
   ["joyex__lijian"] = "离间",
-  [":joyex__lijian"] = "出牌阶段限两次，你可以弃置一张牌并选择两名本回合未选择过的角色，视为其中一名角色对另一名角色使用一张【决斗】。",
+  [":joyex__lijian"] = "出牌阶段限两次，你可以弃置一张牌并选择两名角色，视为其中一名角色对另一名角色使用一张【决斗】，此【决斗】失败的角色角色本回合无法成为〖离间〗的目标。",
   ["joyex__biyue"] = "闭月",
   [":joyex__biyue"] = "结束阶段，你摸X张牌（X为本回合你发动〖离间〗次数+1）。",
   ["#joyex__lijian"] = "离间：弃置一张牌，选择两名角色，视为第二名角色对第一名角色使用【决斗】",
 }
-
-
-
-
-
-
 
 local simayi = General(extension, "joyex__simayi", "wei", 3)
 local joyex__guicai = fk.CreateTriggerSkill{
