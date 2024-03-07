@@ -496,7 +496,7 @@ local joyex__tieji = fk.CreateTriggerSkill{
       data.disresponsive = true
     elseif judge.card.color == Card.Black then
       if not player.dead then
-      player:drawCards(2, self.name)
+        player:drawCards(2, self.name)
       end
     end
   end,
@@ -615,19 +615,75 @@ Fk:loadTranslationTable{
   ["#joyex__hujia-drawcard"] = "护驾:是否令 %src 摸一张牌？"
 }
 
-local huanggai = General(extension, "joyex__huanggai", "wu", 4)
-local zhaxiang_targetmod = fk.CreateTargetModSkill{
-  name = "#joyex__zhaxiang_targetmod",
-  residue_func = function(self, player, skill, scope)
-    if skill.trueName == "slash_skill" and player:hasSkill(self) then
-      return 1
-    end
-    return 0
+local sunquan = General(extension, "joyex__sunquan", "wu", 4)
+local zhiheng = fk.CreateActiveSkill{
+  name = "joyex__zhiheng",
+  anim_type = "drawcard",
+  min_card_num = 1,
+  card_filter = function(self, to_select, selected)
+    return not Self:prohibitDiscard(Fk:getCardById(to_select))
   end,
-  bypass_distances = function(self, player, skill, card)
-    return skill.trueName == "slash_skill" and card.color == Card.Red and player:hasSkill(self)
+  target_num = 0,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) < 1 + player:getMark("joyex__zhiheng-phase")
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local hand = player:getCardIds(Player.Hand)
+    local more = #hand > 0 and table.every(hand, function(id) return table.contains(effect.cards, id) end)
+    room:throwCard(effect.cards, self.name, player, player)
+    if player.dead then return end
+    local cards = player:drawCards(#effect.cards + (more and 1 or 0), self.name)
+    if player:usedSkillTimes(self.name, Player.HistoryPhase) == 1
+    and table.every(cards, function(id) return Fk:getCardById(id).sub_type ~= Card.SubtypeDelayedTrick end) then
+      room:addPlayerMark(player, "joyex__zhiheng-phase")
+    end
+    if player:usedSkillTimes(self.name, Player.HistoryPhase) == 2
+    and table.every(cards, function(id) return Fk:getCardById(id).type == Card.TypeBasic end) then
+      room:addPlayerMark(player, "joyex__zhiheng-phase")
+    end
+  end
+}
+local jiuyuan = fk.CreateTriggerSkill{
+  name = "joyex__jiuyuan$",
+  anim_type = "support",
+  events = {fk.PreHpRecover, fk.TargetSpecified},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.PreHpRecover then
+      return target ~= player and player:hasSkill(self) and player:isWounded()
+      and target.kingdom == "wu" and target == player.room.current
+    else
+      return target ~= player and player:hasSkill(self) and player.dying
+      and target.kingdom == "wu" and data.card.name == "peach"
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    if event == fk.TargetSpecified then return true end
+    return player.room:askForSkillInvoke(target, self.name, nil, "#ex__jiuyuan-ask::"..player.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    if event == fk.PreHpRecover then
+      player.room:recover{ who = player, num = 1, skillName = self.name, recoverBy = target }
+      if not target.dead then
+        target:drawCards(1, self.name)
+      end
+      return true
+    else
+      data.additionalRecover = (data.additionalRecover or 0) + 1
+    end
   end,
 }
+sunquan:addSkill(zhiheng)
+sunquan:addSkill(jiuyuan)
+Fk:loadTranslationTable{
+  ["joyex__sunquan"] = "界孙权",
+  ["joyex__zhiheng"] = "制衡",
+  [":joyex__zhiheng"] = "出牌阶段限一次，你可以弃置至少一张牌，然后摸等量的牌。若你以此法弃置了所有的手牌，则额外摸一张牌，若你本阶段第一次以此法获得的牌不含延时锦囊牌，则本阶段此技能使用次数+1；若你本阶段第二次以此法获得的牌均为基本牌，则本阶段此技能使用次数+1。",
+  ["joyex__jiuyuan"] = "救援",
+  [":joyex__jiuyuan"] = "主公技，其他吴势力角色于其回合内回复体力前，该角色可以改为令你回复1点体力，然后其摸一张牌。其他吴势力武将使用【桃】指定你为目标后，若你处于濒死状态，此【桃】回复体力值+1。",
+}
+
+local huanggai = General(extension, "joyex__huanggai", "wu", 4)
 local zhaxiang = fk.CreateTriggerSkill{
   name = "joyex__zhaxiang",
   anim_type = "offensive",
@@ -639,6 +695,18 @@ local zhaxiang = fk.CreateTriggerSkill{
   end,
   on_use = function(self, event, target, player, data)
     data.disresponsiveList = table.map(player.room.alive_players, Util.IdMapper)
+  end,
+}
+local zhaxiang_targetmod = fk.CreateTargetModSkill{
+  name = "#joyex__zhaxiang_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:hasSkill(zhaxiang) then
+      return 1
+    end
+    return 0
+  end,
+  bypass_distances = function(self, player, skill, card)
+    return skill.trueName == "slash_skill" and card.color == Card.Red and player:hasSkill(zhaxiang)
   end,
 }
 zhaxiang:addRelatedSkill(zhaxiang_targetmod)
