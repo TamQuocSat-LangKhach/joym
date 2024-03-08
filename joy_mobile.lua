@@ -371,6 +371,212 @@ Fk:loadTranslationTable{
   ["#joy_mou__liegong_filter"] = "烈弓",
 }
 
+local liubei = General(extension, "joy_mou__liubei", "shu", 4)
+local rende = fk.CreateViewAsSkill{
+  pattern = ".",
+  name = "joy_mou__rende",
+  interaction = function()
+    local choices = {}
+    if Self:getMark("@joy_mou__rende") > 1 and Self:getMark("joy_mou__rende_vs-turn") == 0 then
+      for _, name in ipairs(U.getAllCardNames("bt")) do
+        local card = Fk:cloneCard(name)
+        if (Fk.currentResponsePattern == nil and Self:canUse(card)) or
+        (Fk.currentResponsePattern and Exppattern:Parse(Fk.currentResponsePattern):match(card)) then
+          if (card.type == Card.TypeBasic and Self:getMark("@joy_mou__rende") > 1)
+          or (card:isCommonTrick() and Self:getMark("@joy_mou__rende") > 2) then
+            table.insertIfNeed(choices, card.name)
+          end
+        end
+      end
+    end
+    return UI.ComboBox {choices = choices}
+  end,
+  view_as = function(self)
+    if not self.interaction.data then return nil end
+    local c = Fk:cloneCard(self.interaction.data)
+    c.skillName = self.name
+    return c
+  end,
+  before_use = function(self, player, use)
+    local room = player.room
+    room:removePlayerMark(player, "@joy_mou__rende", use.card.type == Card.TypeBasic and 2 or 3)
+    room:setPlayerMark(player, "joy_mou__rende_used-turn", 1)
+  end,
+  enabled_at_play = function(self, player)
+    return player:getMark("@joy_mou__rende") > 1 and player:getMark("joy_mou__rende_prohibit-turn") == 0
+    and player:getMark("joy_mou__rende_used-turn") == 0
+  end,
+  enabled_at_response = function (self, player, response)
+    return player:getMark("@joy_mou__rende") > 1 and player:getMark("joy_mou__rende_prohibit-turn") == 0
+    and player:getMark("joy_mou__rende_used-turn") == 0
+  end,
+}
+-- FIXME : use skill_card to connet activeSkill and viewasSkill
+local rende_give = fk.CreateActiveSkill{
+  name = "joy_mou__rende&",
+  main_skill = rende,
+  prompt = "#joy_mou__rende-give",
+  target_num = 1,
+  min_card_num = 1,
+  card_filter = Util.TrueFunc,
+  target_filter = function(self, to_select, selected, selected_cards)
+    return #selected == 0 and to_select ~= Self.id and #selected_cards > 0
+    and Fk:currentRoom():getPlayerById(to_select):getMark("joy_mou__rende_target-phase") == 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local target = room:getPlayerById(effect.tos[1])
+    room:setPlayerMark(target, "joy_mou__rende_target-phase", 1)
+    room:setPlayerMark(target, "joy_mou__rende_target", 1)
+    room:moveCardTo(effect.cards, Player.Hand, target, fk.ReasonGive, self.name, nil, false, player.id)
+    if player.dead then return end
+    room:setPlayerMark(player, "@joy_mou__rende", math.min(10, player:getMark("@joy_mou__rende") + #effect.cards))
+  end,
+  can_use = function (self, player, card)
+    return player:getMark("joy_mou__rende_prohibit-turn") == 0
+  end,
+}
+local rende_trigger = fk.CreateTriggerSkill{
+  name = "#joy_mou__rende_trigger",
+  mute = true,
+  main_skill = rende,
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(rende) and target == player and player.phase == Player.Play and player:getMark("@joy_mou__rende") < 10
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke("joy_mou__rende")
+    room:setPlayerMark(player, "@joy_mou__rende", math.min(10, player:getMark("@joy_mou__rende") + 3))
+  end,
+}
+rende:addRelatedSkill(rende_give)
+rende:addRelatedSkill(rende_trigger)
+liubei:addSkill(rende)
+local zhangwu = fk.CreateActiveSkill{
+  name = "joy_mou__zhangwu",
+  anim_type = "control",
+  frequency = Skill.Limited,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+  end,
+  card_num = 0,
+  card_filter = function() return false end,
+  target_num = 0,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local x = math.min(3, (room:getTag("RoundCount") - 1))
+    if x > 0 then
+      for _, p in ipairs(room:getOtherPlayers(player)) do
+        if player.dead then break end
+        if not p.dead and p:getMark("joy_mou__rende_target") > 0 and not p:isNude() then
+          local cards = (#p:getCardIds("he") < x) and p:getCardIds("he") or
+          room:askForCard(p, x, x, true, self.name, false, ".", "#mou__zhangwu-give::"..player.id..":"..x)
+          if #cards > 0 then
+            local dummy = Fk:cloneCard("dilu")
+            dummy:addSubcards(cards)
+            room:obtainCard(player, dummy, false, fk.ReasonGive)
+          end
+        end
+      end
+    end
+    if not player.dead and player:isWounded() then
+      room:recover { num = math.min(3,player.maxHp-player.hp), skillName = self.name, who = player, recoverBy = player}
+    end
+    room:setPlayerMark(player, "joy_mou__rende_prohibit-turn", 1)
+  end,
+}
+liubei:addSkill(zhangwu)
+local joy_mou__jijiang = fk.CreateTriggerSkill{
+  name = "joy_mou__jijiang$",
+  anim_type = "offensive",
+  events = {fk.EventPhaseEnd},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) and player.phase == Player.Play then
+      local players = player.room.alive_players
+      return #players > 2 and table.find(players, function(p) return p ~= player and p.kingdom == "shu" end)
+    end
+  end,
+  on_cost = function (self, event, target, player, data)
+    local room = player.room
+    local success, dat = room:askForUseActiveSkill(player, "joy_mou__jijiang_choose", "#joy_mou__jijiang-promot", true, nil, true)
+    if success and dat then
+      self.cost_data = dat.targets
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local victim = room:getPlayerById(self.cost_data[1])
+    local bro = room:getPlayerById(self.cost_data[2])
+    room:doIndicate(player.id, {bro.id})
+    local choices = {"joy_mou__jijiang_skip"}
+    if not bro:prohibitUse(Fk:cloneCard("slash")) and not bro:isProhibited(victim, Fk:cloneCard("slash")) then
+      table.insert(choices, 1, "joy_mou__jijiang_slash:"..victim.id)
+    end
+    if room:askForChoice(bro, choices, self.name) == "joy_mou__jijiang_skip" then
+      room:setPlayerMark(bro, "@@joy_mou__jijiang_skip", 1)
+    else
+      room:useVirtualCard("slash", nil, bro, victim, self.name, true)
+    end
+  end,
+}
+local joy_mou__jijiang_choose = fk.CreateActiveSkill{
+  name = "joy_mou__jijiang_choose",
+  card_num = 0,
+  target_num = 2,
+  card_filter = Util.FalseFunc,
+  target_filter = function(self, to_select, selected)
+    if #selected > 1 or to_select == Self.id then return false end
+    if #selected == 0 then
+      return true
+    else
+      local victim = Fk:currentRoom():getPlayerById(selected[1])
+      local bro = Fk:currentRoom():getPlayerById(to_select)
+      return bro.kingdom == "shu" and bro:inMyAttackRange(victim)
+    end
+  end,
+}
+Fk:addSkill(joy_mou__jijiang_choose)
+local joy_mou__jijiang_delay = fk.CreateTriggerSkill{
+  name = "#joy_mou__jijiang_delay",
+  events = {fk.EventPhaseChanging},
+  priority = 10,
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return target:getMark("@@joy_mou__jijiang_skip") > 0 and data.to == Player.Play
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    player.room:setPlayerMark(target, "@@joy_mou__jijiang_skip", 0)
+    target:skip(Player.Play)
+    return true
+  end,
+}
+joy_mou__jijiang:addRelatedSkill(joy_mou__jijiang_delay)
+liubei:addSkill(joy_mou__jijiang)
+Fk:loadTranslationTable{
+  ["joy_mou__liubei"] = "谋刘备",
+  ["#joy_mou__liubei"] = "雄才盖世",
+  ["joy_mou__rende"] = "仁德",
+  [":joy_mou__rende"] = "①出牌阶段开始时，你获得3个“仁”标记；②出牌阶段，你可以将任意张牌交给一名本阶段未以此法获得牌的其他角色，获得等量的“仁”标记(至多拥有10个)。③每回合限一次，每当你需要使用或打出基本牌/普通锦囊牌时，你可以移去2/3个“仁”标记视为使用或打出之。",
+  ["@joy_mou__rende"] = "仁",
+  ["joy_mou__rende&"] = "仁德",
+  ["#joy_mou__rende-give"] = "仁德：将任意张牌交给一名本阶段未以此法获得牌的其他角色，获得等量的“仁”标记",
+  [":joy_mou__rende&"] = "出牌阶段，你可以将任意张牌交给一名本阶段未以此法获得牌的其他角色，获得等量的“仁”标记(至多拥有10个)。",
+  ["joy_mou__zhangwu"] = "章武",
+  [":joy_mou__zhangwu"] = "限定技，出牌阶段，你可以令〖仁德〗选择过的所有角色依次交给你X张牌（X为游戏轮数-1，至多为3），然后你回复3点体力，无法发动〖仁德〗直到回合结束。",
+  ["joy_mou__jijiang"] = "激将",
+  [":joy_mou__jijiang"] = "主公技，出牌阶段结束时，你可以选择一名其他角色，然后令一名攻击范围内含有其的其他蜀势力角色选择一项："..
+  "1.视为对其使用一张【杀】；2.跳过下一个出牌阶段。",
+  ["@@joy_mou__jijiang_skip"] = "激将",
+  ["#joy_mou__jijiang-promot"] = "激将：先选择【杀】的目标，再选需要响应“激将”的蜀势力角色",
+  ["joy_mou__jijiang_slash"] = "视为对 %src 使用一张【杀】",
+  ["joy_mou__jijiang_skip"] = "跳过下一个出牌阶段",
+  ["joy_mou__jijiang_choose"] = "激将",
+}
+
 local caocao = General(extension, "joy_mou__caocao", "wei", 4)
 local mou__jianxiong = fk.CreateTriggerSkill{
   name = "joy_mou__jianxiong",
