@@ -148,6 +148,184 @@ Fk:loadTranslationTable{
   ["#joyex__qiangxi-cost"] = "强袭：你可以弃置一张装备牌，令 %src 受到的伤害+1",
 }
 
+local wolong = General(extension, "joy__wolong", "shu", 3)
+local bazhen = fk.CreateTriggerSkill{
+  name = "joy__bazhen",
+  events = {fk.AskForCardUse, fk.AskForCardResponse, fk.FinishJudge},
+  frequency = Skill.Compulsory,
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) then
+      if event ~= fk.FinishJudge then
+        return not player:isFakeSkill(self) and not player:getEquipment(Card.SubtypeArmor) and player:getMark(fk.MarkArmorNullified) == 0
+        and (data.cardName == "jink" or (data.pattern and Exppattern:Parse(data.pattern):matchExp("jink|0|nosuit|none")))
+      else
+        return data.reason == "eight_diagram" and data.card.color ~= Card.Red
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    return event == fk.FinishJudge or player.room:askForSkillInvoke(player, self.name)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke(self.name)
+    if event == fk.FinishJudge then
+      room:notifySkillInvoked(player, self.name, "drawcard")
+      player:drawCards(1, self.name)
+    else
+      room:notifySkillInvoked(player, self.name, "defensive")
+      local judgeData = {
+        who = player,
+        reason = "eight_diagram",
+        pattern = ".|.|heart,diamond",
+      }
+      room:judge(judgeData)
+      if judgeData.card.color == Card.Red then
+        local card = Fk:cloneCard("jink")
+        card.skillName = "eight_diagram"
+        card.skillName = "bazhen"
+        if event == fk.AskForCardUse then
+          data.result = { from = player.id, card = card }
+          if data.eventData then
+            data.result.toCard = data.eventData.toCard
+            data.result.responseToEvent = data.eventData.responseToEvent
+          end
+        else
+          data.result = card
+        end
+        return true
+      end
+    end
+  end
+}
+wolong:addSkill(bazhen)
+local joy__huoji__fireAttackSkill = fk.CreateActiveSkill{
+  name = "joy__huoji__fire_attack_skill",
+  prompt = "#fire_attack_skill",
+  target_num = 1,
+  mod_target_filter = function(_, to_select, _, _, _, _)
+    return not Fk:currentRoom():getPlayerById(to_select):isKongcheng()
+  end,
+  target_filter = function(self, to_select, selected, _, card)
+    if #selected < self:getMaxTargetNum(Self, card) then
+      return self:modTargetFilter(to_select, selected, Self.id, card)
+    end
+  end,
+  on_effect = function(self, room, cardEffectEvent)
+    local from = room:getPlayerById(cardEffectEvent.from)
+    local to = room:getPlayerById(cardEffectEvent.to)
+    if to:isKongcheng() then return end
+    local showCard = room:askForCard(to, 1, 1, false, self.name, false, ".|.|.|hand", "#fire_attack-show:" .. from.id)[1]
+    to:showCards(showCard)
+    local suit = Fk:getCardById(showCard):getSuitString()
+    local top = room:getNCards(4)
+    for i = 4, 1, -1 do
+      table.insert(room.draw_pile, 1, top[i])
+    end
+    local can_throw = table.filter(top, function(id) return Fk:getCardById(id):getSuitString() == suit end)
+    local ids , _ = U.askforChooseCardsAndChoice(from, can_throw, {"OK"}, self.name, "#joy__huoji-card", {"Cancel"}, 1, 1, top)
+    if #ids == 0 and not from:isKongcheng() then
+      ids = room:askForDiscard(from, 1, 1, false, self.name, true,
+      ".|.|" .. suit, "#fire_attack-discard:" .. to.id .. "::" .. suit, true)
+    end
+    if #ids > 0 then
+      room:throwCard(ids, self.name, from, from)
+      room:damage({
+        from = from,
+        to = to,
+        card = cardEffectEvent.card,
+        damage = 1,
+        damageType = fk.FireDamage,
+        skillName = self.name
+      })
+    end
+  end,
+}
+joy__huoji__fireAttackSkill.cardSkill = true
+Fk:addSkill(joy__huoji__fireAttackSkill)
+local huoji = fk.CreateViewAsSkill{
+  name = "joy__huoji",
+  anim_type = "offensive",
+  pattern = "fire_attack",
+  prompt = "#huoji",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).color == Card.Red and Fk:currentRoom():getCardArea(to_select) ~= Player.Equip
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return end
+    local card = Fk:cloneCard("fire_attack")
+    card.skillName = self.name
+    card:addSubcard(cards[1])
+    return card
+  end,
+}
+local huoji_trigger = fk.CreateTriggerSkill{
+  name = "#joy__huoji_trigger",
+  events = {fk.PreCardEffect},
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(huoji) and data.from == player.id and data.card.trueName == "fire_attack"
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local card = data.card:clone()
+    local c = table.simpleClone(data.card)
+    for k, v in pairs(c) do
+      card[k] = v
+    end
+    card.skill = joy__huoji__fireAttackSkill
+    data.card = card
+  end,
+}
+huoji:addRelatedSkill(huoji_trigger)
+wolong:addSkill(huoji)
+local kanpo = fk.CreateViewAsSkill{
+  name = "joy__kanpo",
+  anim_type = "control",
+  pattern = "nullification",
+  prompt = "#kanpo",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).color == Card.Black and table.contains(Self.player_cards[Player.Hand], to_select)
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return end
+    local card = Fk:cloneCard("nullification")
+    card.skillName = self.name
+    card:addSubcard(cards[1])
+    return card
+  end,
+  enabled_at_response = function (self, player, response)
+    return not response and not player:isKongcheng()
+  end,
+}
+local joy__kanpo_trigger = fk.CreateTriggerSkill{
+  name = "#joy__kanpo_trigger",
+  refresh_events = {fk.PreCardUse},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and player:hasSkill(kanpo) and data.card.trueName == "nullification"
+  end,
+  on_refresh = function(self, event, target, player, data)
+    data.disresponsiveList = table.map(player.room.alive_players, Util.IdMapper)
+  end,
+}
+kanpo:addRelatedSkill(joy__kanpo_trigger)
+wolong:addSkill(kanpo)
+Fk:loadTranslationTable{
+  ["joy__wolong"] = "卧龙诸葛亮",
+  ["#joy__wolong"] = "卧龙",
+  ["joy__bazhen"] = "八阵",
+  [":joy__bazhen"] = "锁定技，若你没有装备防具，视为你装备着【八卦阵】。当你因【八卦阵】而判定的非红色判定牌生效后，你摸一张牌。",
+  ["joy__huoji"] = "火计",
+  [":joy__huoji"] = "你可以将一张红色手牌当【火攻】使用。你执行【火攻】的效果时可观看牌堆顶四张牌，选择一张牌代替你需要弃置的牌。",
+  ["joy__kanpo"] = "看破",
+  [":joy__kanpo"] = "你可以将一张黑色手牌当【无懈可击】使用。你使用的【无懈可击】不可响应。",
+  ["#joy__huoji-card"] = "火计：选择一张弃置",
+  ["joy__huoji__fire_attack_skill"] = "火攻",
+  ["#joy__huoji_trigger"] = "火计",
+  ["#joy__kanpo_trigger"] = "看破",
+}
+
 -- 林
 
 local xuhuang = General(extension, "joyex__xuhuang", "wei", 4)
