@@ -2009,7 +2009,105 @@ Fk:loadTranslationTable{
   ["#joy__gongxin-active"] = "是否发动 攻心，观看%dest的手牌",
   ["#joy__gongxin-view"] = "攻心：可以选择一张红色牌",
   ["joy__gongxin_obtaincard"] = "获得此牌",
+}
 
+local godzhangliao = General(extension, "joy__godzhangliao", "god", 4)
+local duorui = fk.CreateTriggerSkill{
+  name = "joy__duorui",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.EventPhaseStart and player == target and player:hasSkill(self) and player.phase == Player.Play then
+      return table.find(player.room.alive_players, function(p) return p ~= player and not p:isKongcheng() end)
+    end
+  end,
+  on_cost = function (self,event, target, player, data)
+    local targets = table.filter(player.room:getOtherPlayers(player), function (p) return not p:isKongcheng() end)
+    local to = player.room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy__duorui-choose",self.name,true)
+    if #to > 0 then
+      self.cost_data = to[1]
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data)
+    local id = room:askForCardChosen(player, to, { card_data = { { "$Hand", to.player_cards[Player.Hand] } } }, self.name)
+    local color = Fk:getCardById(id):getColorString()
+    if color ~= "nocolor" then
+      local mark = U.getMark(to, "@joy__duorui-turn")
+      table.insertIfNeed(mark, color)
+      room:setPlayerMark(to, "@joy__duorui-turn", mark)
+    end
+    room:moveCardTo(id, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, true, player.id)
+  end,
+}
+local duorui_trigger = fk.CreateTriggerSkill{
+  name = "#joy__duorui_trigger",
+  mute = true,
+  events = {fk.CardUsing},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player == player.room.current
+    and table.find(player.room.alive_players, function (p)
+      return table.contains(U.getMark(p, "@joy__duorui-turn"), data.card:getColorString())
+    end)
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    data.disresponsiveList = data.disresponsiveList or {}
+    for _, p in ipairs(player.room.alive_players) do
+      if table.contains(U.getMark(p, "@joy__duorui-turn"), data.card:getColorString()) then
+        table.insertIfNeed(data.disresponsiveList, p.id)
+      end
+    end
+  end,
+}
+local zhiti = fk.CreateTriggerSkill{
+  name = "joy__zhiti",
+  anim_type = "offensive",
+  frequency = Skill.Compulsory,
+  events = {fk.DrawNCards},
+  can_trigger = function(self,event,target,player,data)
+    return target == player and player:hasSkill(self)
+    and #table.filter(player.room.alive_players, function(p) return p:isWounded() end) > 1
+  end,
+  on_use = function(self, event, target, player, data)
+    data.n = data.n + 1
+  end,
+}
+local zhiti_targetmod = fk.CreateTargetModSkill{
+  name = "#joy__zhiti_targetmod",
+  residue_func = function(self, player, skill, scope)
+    if skill.trueName == "slash_skill" and player:hasSkill(zhiti) then
+      local n = 0
+      for _, p in ipairs(Fk:currentRoom().alive_players) do
+        if p:isWounded() then
+          n = n + 1
+        end
+      end
+      if n > 2 then
+        return 1
+      end
+    end
+  end,
+}
+duorui:addRelatedSkill(duorui_trigger)
+zhiti:addRelatedSkill(zhiti_targetmod)
+godzhangliao:addSkill(duorui)
+godzhangliao:addSkill(zhiti)
+
+Fk:loadTranslationTable{
+  ["joy__godzhangliao"] = "神张辽",
+  ["#joy__godzhangliao"] = "雁门之刑天",
+
+  ["joy__duorui"] = "夺锐",
+  [":joy__duorui"] = "出牌阶段开始时，你可以选择一名有手牌的其他角色，观看并获得其一张手牌，然后本回合其无法响应你使用的该牌颜色的牌。",
+  ["joy__zhiti"] = "止啼",
+  [":joy__zhiti"] = "锁定技，若存活的已受伤角色数量：大于1，你摸牌阶段摸牌数量+1；大于2，你出牌阶段可使用【杀】的次数+1。",
+
+  ["#joy__duorui_trigger"] = "夺锐",
+  ["#joy__duorui-choose"] = "夺锐：观看并获得一名其他角色的一张手牌",
+  ["joy__duoruiget"] = "确定",
+  ["@joy__duorui-turn"] = "夺锐",
 }
 
 return extension

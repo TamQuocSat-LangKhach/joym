@@ -55,25 +55,35 @@ Fk:loadTranslationTable{
 local tangji = General(extension, "joy__tangji", "qun", 3, 3, General.Female)
 local joy__kangge = fk.CreateTriggerSkill{
   name = "joy__kangge",
-  events = {fk.TurnStart, fk.AfterCardsMove},
+  events = {fk.TurnStart, fk.AfterCardsMove, fk.EnterDying},
   mute = true,
   can_trigger = function(self, event, target, player, data)
     if player:hasSkill(self) then
       if event == fk.TurnStart then
         return target == player
-      else
-        if player:getMark(self.name) ~= 0 and player:getMark("joy__kangge-turn") < 3 then
+      elseif event == fk.AfterCardsMove then
+        if player:getMark("joy__kangge_draw-turn") < 3 then
+          local n = 0
           for _, move in ipairs(data) do
-            if move.to and move.toArea == Card.PlayerHand and player.room:getPlayerById(move.to):getMark("@@joy__kangge") > 0 and
-              player.room:getPlayerById(move.to).phase == Player.NotActive then
-              return true
+            if move.to and move.toArea == Card.PlayerHand and player.room:getPlayerById(move.to):getMark("@@joy__kangge") > 0
+            and player.room:getPlayerById(move.to).phase == Player.NotActive then
+              n = n + #move.moveInfo
             end
           end
+          if n > 0 then
+            self.cost_data = n
+            return true
+          end
         end
+      else
+        return target.dying and target:getMark("@@joy__kangge") > 0 and player:getMark("joy__kangge_help-round") == 0
       end
     end
   end,
   on_cost = function(self, event, target, player, data)
+    if event == fk.EnterDying then
+      return player.room:askForSkillInvoke(player, self.name, nil, "#joy__kangge-invoke::"..target.id)
+    end
     return true
   end,
   on_use = function(self, event, target, player, data)
@@ -81,57 +91,31 @@ local joy__kangge = fk.CreateTriggerSkill{
     player:broadcastSkillInvoke(self.name)
     if event == fk.TurnStart then
       room:notifySkillInvoked(player, self.name, "special")
+      local targets = table.map(room:getOtherPlayers(player), Util.IdMapper)
+      if #targets == 0 then return end
       for _, p in ipairs(room:getOtherPlayers(player)) do
         if p:getMark("@@joy__kangge") > 0 then
           room:setPlayerMark(p, "@@joy__kangge", 0)
         end
       end
-      local targets = table.map(room:getOtherPlayers(player), function(p) return p.id end)
-      local to = room:askForChoosePlayers(player, targets, 1, 1, "#joy__kangge-choose", self.name, false)
-      if #to > 0 then
-        to = to[1]
-      else
-        to = table.random(targets)
-      end
-      room:setPlayerMark(room:getPlayerById(to), "@@joy__kangge", 1)
+      local tos = room:askForChoosePlayers(player, targets, 1, 1, "#joy__kangge-choose", self.name, false)
+      room:setPlayerMark(room:getPlayerById(tos[1]), "@@joy__kangge", 1)
     elseif event == fk.AfterCardsMove then
-      local n = 0
-      for _, move in ipairs(data) do
-        if move.to and room:getPlayerById(move.to):getMark("@@joy__kangge") > 0 and move.toArea == Card.PlayerHand then
-          n = n + #move.moveInfo
-        end
-      end
-      if n > 0 then
-        room:notifySkillInvoked(player, self.name, "drawcard")
-        local x = math.min(n, 3 - player:getMark("joy__kangge-turn"))
-        room:addPlayerMark(player, "joy__kangge-turn", x)
-        player:drawCards(x, self.name)
-      end
+      room:notifySkillInvoked(player, self.name, "drawcard")
+      local n = math.min(self.cost_data, 3 - player:getMark("joy__kangge_draw-turn"))
+      room:addPlayerMark(player, "joy__kangge_draw-turn", n)
+      player:drawCards(n, self.name)
+    else
+      room:notifySkillInvoked(player, "joy__kangge", "support")
+      room:doIndicate(player.id, {target.id})
+      room:setPlayerMark(player, "joy__kangge_help-round", 1)
+      room:recover({
+        who = target,
+        num = 1 - target.hp,
+        recoverBy = player,
+        skillName = self.name,
+      })
     end
-  end,
-}
-local joy__kangge_trigger = fk.CreateTriggerSkill{
-  name = "#joy__kangge_trigger",
-  mute = true,
-  events = {fk.EnterDying},
-  can_trigger = function(self, event, target, player, data)
-    return player:hasSkill("joy__kangge") and target:getMark("@@joy__kangge") > 0 and
-      player:usedSkillTimes(self.name, Player.HistoryRound) == 0
-  end,
-  on_cost = function(self, event, target, player, data)
-    return player.room:askForSkillInvoke(player, "joy__kangge", nil, "#joy__kangge-invoke::"..target.id)
-  end,
-  on_use = function(self, event, target, player, data)
-    local room = player.room
-    player:broadcastSkillInvoke("joy__kangge")
-    room:notifySkillInvoked(player, "joy__kangge", "support")
-    room:doIndicate(player.id, {target.id})
-    room:recover({
-      who = target,
-      num = 1 - target.hp,
-      recoverBy = player,
-      skillName = "joy__kangge"
-    })
   end,
 }
 local joy__jielie = fk.CreateTriggerSkill{
@@ -150,7 +134,7 @@ local joy__jielie = fk.CreateTriggerSkill{
     local suit
     if to then
       local suits = {"spade", "heart", "club", "diamond"}
-      local choices = table.map(suits, function(s) return Fk:translate("log_"..s) end)
+      local choices = table.map(suits, function(s) return "log_"..s end)
       local choice = room:askForChoice(player, choices, self.name, "#joy__jielie-choice::"..to.id..":"..data.damage)
       suit = suits[table.indexOf(choices, choice)]
       room:doIndicate(player.id, {to.id})
@@ -172,14 +156,12 @@ local joy__jielie = fk.CreateTriggerSkill{
     return true
   end,
 }
-joy__kangge:addRelatedSkill(joy__kangge_trigger)
 tangji:addSkill(joy__kangge)
 tangji:addSkill(joy__jielie)
 Fk:loadTranslationTable{
   ["joy__tangji"] = "唐姬",
   ["joy__kangge"] = "抗歌",
-  [":joy__kangge"] = "回合开始时，你选择一名其他角色：当该角色于其回合外获得手牌时，你摸等量的牌（每回合最多摸3张）；每轮限一次，当该角色"..
-  "进入濒死状态时，你可以令其将体力回复至1点。场上仅能存在一名“抗歌”角色。",
+  [":joy__kangge"] = "回合开始时，你令一名其他角色获得“抗歌”标记（若已有此标记则转移给其）：当该角色于其回合外获得手牌时，你摸等量的牌（每回合最多摸3张）；每轮限一次，当该角色进入濒死状态时，你可以令其将体力回复至1点。",
   ["joy__jielie"] = "节烈",
   [":joy__jielie"] = "当你受到伤害时，你可以防止此伤害并选择一种花色，然后你失去1点体力，令“抗歌”角色从弃牌堆中随机获得X张此花色的牌（X为伤害值）。",
   ["#joy__kangge-choose"] = "抗歌：请选择“抗歌”角色",
@@ -260,8 +242,6 @@ Fk:loadTranslationTable{
   [":joy__shezang"] = "每回合限一次，当你或你回合内有角色进入濒死状态时，你可以从牌堆获得不同花色的牌各一张。",
   ["@joy__tongli-turn"] = "同礼",
 }
-
-
 
 local joy__guansuo = General(extension, "joy__guansuo", "shu", 4)
 local joy__zhengnan = fk.CreateTriggerSkill{
