@@ -5,7 +5,7 @@ Fk:loadTranslationTable{
   ["joy_yj"] = "欢乐-一将成名",
 }
 
---曹植 于禁 荀攸 曹彰 步练师 刘封 伏皇后 周仓 曹休 孙登 徐氏 曹节
+-- yj2011
 local yujin = General(extension, "joy__yujin", "wei", 4)
 local yizhong = fk.CreateTriggerSkill{
   name = "joy__yizhong",
@@ -25,6 +25,168 @@ Fk:loadTranslationTable{
   ["joy__yizhong"] = "毅重",
   [":joy__yizhong"] = "锁定技，若你的装备区没有牌，梅花【杀】对你无效。",
 }
+
+local wuguotai = General(extension, "joy__wuguotai", "wu", 3, 3, General.Female)
+local ganlu = fk.CreateTriggerSkill{
+  name = "joy__ganlu",
+  events = {fk.EventPhaseStart},
+  anim_type = "control",
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and player.phase == Player.Play
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local _,dat = room:askForUseActiveSkill(player, "joy__ganlu_active", "#joy__ganlu-invoke", true)
+    if dat then
+      local targets = table.map(dat.targets, Util.Id2PlayerMapper)
+      if dat.interaction == "joy__ganlu_move" then
+        room:askForMoveCardInBoard(player, targets[1], targets[2], self.name, "e", nil)
+      else
+        local slots = {}
+        for _, id in ipairs(targets[1]:getCardIds("e")) do
+          local s = Fk:getCardById(id).sub_type
+          if targets[2]:getEquipment(s) ~= nil then
+            table.insertIfNeed(slots, Util.convertSubtypeAndEquipSlot(s))
+          end
+        end
+        if #slots == 0 then return end
+        local choice = room:askForChoice(player, slots, self.name)
+        local id1 = targets[1]:getEquipment(Util.convertSubtypeAndEquipSlot(choice))
+        local id2 = targets[2]:getEquipment(Util.convertSubtypeAndEquipSlot(choice))
+        local moveInfos = {}
+        table.insert(moveInfos, {
+          from = targets[1].id,
+          ids = {id1},
+          toArea = Card.Processing,
+          moveReason = fk.ReasonExchange,
+          proposer = player.id,
+          skillName = self.name,
+        })
+        table.insert(moveInfos, {
+          from = targets[2].id,
+          ids = {id2},
+          toArea = Card.Processing,
+          moveReason = fk.ReasonExchange,
+          proposer = player.id,
+          skillName = self.name,
+        })
+        room:moveCards(table.unpack(moveInfos))
+        moveInfos = {}
+        if not targets[2].dead and room:getCardArea(id1) == Card.Processing
+        and targets[2]:hasEmptyEquipSlot(Fk:getCardById(id1).sub_type) then
+          table.insert(moveInfos, {
+            ids = {id1},
+            to = targets[2].id,
+            toArea = Card.PlayerEquip,
+            moveReason = fk.ReasonExchange,
+            proposer = player.id,
+            skillName = self.name,
+          })
+        end
+        if not targets[1].dead and room:getCardArea(id2) == Card.Processing
+        and targets[1]:hasEmptyEquipSlot(Fk:getCardById(id2).sub_type) then
+          table.insert(moveInfos, {
+            ids = {id2},
+            to = targets[1].id,
+            toArea = Card.PlayerEquip,
+            moveReason = fk.ReasonExchange,
+            proposer = player.id,
+            skillName = self.name,
+          })
+        end
+        if #moveInfos > 0 then
+          room:moveCards(table.unpack(moveInfos))
+        end
+        local to_throw = {}
+        if room:getCardArea(id1) == Card.Processing then table.insert(to_throw, id1) end
+        if room:getCardArea(id2) == Card.Processing then table.insert(to_throw, id2) end
+        if #to_throw > 0 then
+          room:moveCards({
+            ids = to_throw,
+            toArea = Card.DiscardPile,
+            moveReason = fk.ReasonPutIntoDiscardPile,
+          })
+        end
+      end
+    else
+      player:drawCards(1, self.name)
+    end
+  end,
+}
+local joy__ganlu_active = fk.CreateActiveSkill{
+  name = "joy__ganlu_active",
+  card_num = 0,
+  target_num = 2,
+  interaction = function(self)
+    return UI.ComboBox {choices = {"joy__ganlu_move", "joy__ganlu_exchange"} }
+  end,
+  card_filter = Util.FalseFunc,
+  target_filter = function(self, to_select, selected)
+    if not self.interaction.data or #selected == 2 then return end
+    local to = Fk:currentRoom():getPlayerById(to_select)
+    if #selected == 0 then
+      return #to:getCardIds("e") > 0
+    else
+      local first = Fk:currentRoom():getPlayerById(selected[1])
+      if #first:getCardIds("e") == 0 or firse == to then return end
+      if self.interaction.data == "joy__ganlu_move" then
+        return first:canMoveCardsInBoardTo(to, "e")
+      else
+        return table.find(first:getCardIds("e"), function(id) return to:getEquipment(Fk:getCardById(id).sub_type) ~= nil end)
+      end
+    end
+  end,
+}
+Fk:addSkill(joy__ganlu_active)
+wuguotai:addSkill(ganlu)
+local buyi = fk.CreateTriggerSkill{
+  name = "joy__buyi",
+  anim_type = "support",
+  events = {fk.EnterDying},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and not target:isKongcheng() and player:usedSkillTimes(self.name, Player.HistoryTurn) <3
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, data, "#joy__buyi-invoke::"..target.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local id = room:askForCardChosen(player, target, "h", self.name)
+    target:showCards({id})
+    if Fk:getCardById(id).type == Card.TypeBasic and table.contains(target.player_cards[Player.Hand], id) then
+      room:throwCard({id}, self.name, target, target)
+      if target.dead or not target:isWounded() then return end
+      room:recover{
+        who = target,
+        num = 1,
+        recoverBy = player,
+        skillName = self.name
+      }
+    end
+  end,
+}
+wuguotai:addSkill(buyi)
+Fk:loadTranslationTable{
+  ["joy__wuguotai"] = "吴国太",
+  ["#joy__wuguotai"] = "武烈皇后",
+
+  ["joy__ganlu"] = "甘露",
+  [":joy__ganlu"] = "锁定技，出牌阶段开始时，你须选择一项：1.移动场上的一张装备牌；2.交换两名角色装备区副类别相同的装备牌；3.你摸一张牌。",
+  ["joy__buyi"] = "补益",
+  [":joy__buyi"] = "每回合限三次，当一名角色进入濒死状态时，你可以展示该角色一张手牌，若为基本牌，则其弃置此牌并回复1点体力。",
+
+  ["#joy__ganlu-invoke"] = "甘露：请移动或交换场上装备牌，点“取消”则摸一张牌",
+  ["joy__ganlu_active"] = "甘露",
+  ["joy__ganlu_move"] = "移动场上的一张装备牌",
+  ["joy__ganlu_exchange"] = "交换两名角色副类别相同的装备牌",
+  [""] = "",
+  [""] = "",
+  [""] = "",
+  ["#joy__buyi-invoke"] = "补益：你可以展示 %dest 的一张手牌，若为基本牌，其弃置并回复1点体力",
+}
+
+-- yj2012
 
 local xunyou = General(extension, "joy__xunyou", "wei", 3)
 local joy__qice = fk.CreateViewAsSkill{

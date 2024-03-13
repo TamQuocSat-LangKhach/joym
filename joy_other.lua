@@ -490,6 +490,12 @@ Fk:loadTranslationTable{
   "<br>⑤使用普通锦囊牌指定目标时，你模一张牌。",
   ["@[joy__anshi]joy__anshi-round"] = "暗示",
   ["@@joy__anshi_prohibit-turn"] = "暗示封牌",
+
+  ["$joy__shanshan1"] = "你等着，略略略~",
+  ["$joy__shanshan2"] = "我闪！",
+  ["$joy__anshi1"] = "女孩的心思，别猜~",
+  ["$joy__anshi2"] = "一个小小的惊喜！",
+  ["~joy__xiaoshan"] = "时间已到，闪人咯！",
 }
 
 
