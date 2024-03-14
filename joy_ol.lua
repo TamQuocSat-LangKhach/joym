@@ -48,7 +48,7 @@ local joy__yishe = fk.CreateTriggerSkill{
       if player:isNude() then return end
       local dummy = Fk:cloneCard("dilu")
       local cards = player:getCardIds("he")
-      if #player:getCardIds("he") > 2 then
+      if #cards > 2 then
         cards = room:askForCard(player, 2, 2, true, self.name, false, ".", "#joy__yishe-cost")
       end
       dummy:addSubcards(cards)
