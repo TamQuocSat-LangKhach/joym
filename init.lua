@@ -6,6 +6,7 @@ local joy_yj = require "packages/joym/joy_yj"
 local joy_god = require "packages/joym/joy_god"
 local joy_sp = require "packages/joym/joy_sp"
 local joy_ty = require "packages/joym/joy_ty"
+local joy_ol = require "packages/joym/joy_ol"
 local joy_mobile = require "packages/joym/joy_mobile"
 
 
@@ -20,5 +21,6 @@ return {
   joy_god,
   joy_sp,
   joy_ty,
+  joy_ol,
   joy_mobile,
 }
