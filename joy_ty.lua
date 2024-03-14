@@ -404,17 +404,10 @@ local joy__fuhan = fk.CreateTriggerSkill{
     local skills = {}
     local choices = {}
     for _, general_name in ipairs(generals) do
-      local general = Fk.generals[general_name]
       local g_skills = {}
-      for _, skill in ipairs(general.skills) do
-        if not (table.contains({Skill.Limited, Skill.Wake, Skill.Quest}, skill.frequency) or skill.lordSkill) and
-        (#skill.attachedKingdom == 0 or (table.contains(skill.attachedKingdom, "shu") and player.kingdom == "shu")) then
-          table.insertIfNeed(g_skills, skill.name)
-        end
-      end
-      for _, s_name in ipairs(general.other_skills) do
-        local skill = Fk.skills[s_name]
-        if not (table.contains({Skill.Limited, Skill.Wake, Skill.Quest}, skill.frequency) or skill.lordSkill) and
+      for _, s in ipairs(Fk.generals[general_name]:getSkillNameList()) do
+        local skill = Fk.skills[s]
+        if skill.frequency < 4 and
         (#skill.attachedKingdom == 0 or (table.contains(skill.attachedKingdom, "shu") and player.kingdom == "shu")) then
           table.insertIfNeed(g_skills, skill.name)
         end
@@ -552,7 +545,6 @@ Fk:loadTranslationTable{
   ["#joy__wuniang2-choose"] = "武娘：你可以获得一名其他角色的一张牌，其摸一张牌，关索摸一张牌",
   ["#joy__xushen-choose"] = "许身：你可以令一名其他角色摸三张牌并选择是否变身为欢乐杀关索！",
   ["#joy__xushen-invoke"]= "许身：你可以变身为欢乐杀关索！",
-  
 }
 
 local zhangqiying = General(extension, "joy__zhangqiying", "qun", 3, 3, General.Female)
@@ -682,7 +674,6 @@ Fk:loadTranslationTable{
   ["joy__zhangqiying"] = "张琪瑛",
   ["#joy__zhangqiying"] = "禳祷西东",
 
- 
   ["joy__zhenyi"] = "真仪",
   [":joy__zhenyi"] = "你可以在以下时机弃置相应的标记来发动以下效果：<br>"..
   "当一张判定牌生效前，你可以弃置“紫微”，然后将判定结果改为♠5或<font color='red'>♥5</font>；<br>"..
@@ -814,5 +805,81 @@ Fk:loadTranslationTable{
 
   ["$ex__yingzi_joy__sunyi"] = "骁悍果烈，威震江东！",
 }
+
+local panjun = General(extension, "joy__panjun", "wu", 3)
+local guanwei = fk.CreateTriggerSkill{
+  name = "joy__guanwei",
+  anim_type = "support",
+  events = {fk.EventPhaseEnd},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and target.phase == Player.Play and
+      player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and not player:isNude() then
+        local suits = {}
+        local events = player.room.logic:getEventsOfScope(GameEvent.UseCard, 1, function (e)
+          local use = e.data[1]
+          if use.from == target.id then
+            if table.contains(suits, use.card.suit) then
+              return true
+            else
+              table.insert(suits, use.card.suit)
+            end
+          end
+          return false
+        end, Player.HistoryTurn)
+        return #events > 0
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local cards = player.room:askForDiscard(player, 1, 1, true, self.name, true, ".", "#joy__guanwei-invoke::"..target.id, true)
+    if #cards > 0 then
+      player.room:doIndicate(player.id, {target.id})
+      self.cost_data = cards
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:throwCard(self.cost_data, self.name, player, player)
+    if not target.dead then
+      target:drawCards(2, self.name)
+      target:gainAnExtraPhase(Player.Play)
+    end
+  end,
+}
+local gongqing = fk.CreateTriggerSkill{
+  name = "joy__gongqing",
+  mute = true,
+  frequency = Skill.Compulsory,
+  events = {fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    if target == player and player:hasSkill(self) and data.from then
+      return data.from:getAttackRange() >= 3 or data.damage > 1
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if data.from:getAttackRange() < 3 then
+      data.damage = 1
+      player:broadcastSkillInvoke(self.name, 1)
+      room:notifySkillInvoked(player, self.name, "defensive")
+    elseif data.from:getAttackRange() > 3 then
+      player:drawCards(1, self.name)
+      player:broadcastSkillInvoke(self.name, 2)
+      room:notifySkillInvoked(player, self.name, "drawcard")
+    end
+  end,
+}
+panjun:addSkill(guanwei)
+panjun:addSkill(gongqing)
+Fk:loadTranslationTable{
+  ["joy__panjun"] = "潘濬",
+  ["#joy__panjun"] = "方严疾恶",
+  ["joy__guanwei"] = "观微",
+  [":joy__guanwei"] = "每回合限一次，一名角色的出牌阶段结束时，若其于此回合内使用过相同花色的牌，你可弃置一张牌，令其摸两张牌，然后其获得一个额外的出牌阶段。",
+  ["joy__gongqing"] = "公清",
+  [":joy__gongqing"] = "锁定技，当你受到伤害时，若伤害来源攻击范围小于3，则你只受到1点伤害；若伤害来源攻击范围不小于3，你摸一张牌。",
+  ["#joy__guanwei-invoke"] = "观微：你可以弃置一张牌，令 %dest 摸两张牌并执行一个额外的出牌阶段",
+}
+
+
 
 return extension

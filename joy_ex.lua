@@ -26,7 +26,7 @@ local yajiao = fk.CreateTriggerSkill{
     if event == fk.EventPhaseStart then
       return true
     else
-      return player.room:askForSkillInvoke(player,self.name,data)
+      return player.room:askForSkillInvoke(player, self.name)
     end
   end,
   on_use = function(self, event, target, player, data)
@@ -49,7 +49,7 @@ zhaoyun:addSkill(yajiao)
 Fk:loadTranslationTable{
   ["joyex__zhaoyun"] = "界赵云",
   ["joyex__yajiao"] = "涯角",
-  [":joyex__yajiao"] = "每当你于回合外使用或打出手牌时，你可以展示牌堆顶一张牌并交给一名角色；结束阶段，你于本回合每发动一次【龙胆】，你摸一张牌。",
+  [":joyex__yajiao"] = "每当你于回合外使用或打出手牌时，你可以展示牌堆顶一张牌并交给一名角色；结束阶段，若你于本回合发动过【龙胆】，你摸一张牌。",
   ["#joyex__yajiao-choose"] = "涯角: 将 %arg 交给一名角色",
 }
 

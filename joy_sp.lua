@@ -15,7 +15,7 @@ local joy__shushen = fk.CreateTriggerSkill{
   anim_type = "support",
   events = {fk.DamageInflicted},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name)
+    return player:hasSkill(self)
   end,
   on_cost = function(self, event, target, player, data)
     return player.room:askForSkillInvoke(player, self.name, nil, "#joy__shushen-invoke::"..target.id)
@@ -25,6 +25,8 @@ local joy__shushen = fk.CreateTriggerSkill{
     room:loseHp(player, 1, self.name)
     if not player.dead then
       player:drawCards(1, self.name)
+    end
+    if not target.dead then
       target:drawCards(1, self.name)
     end
     return true
@@ -32,10 +34,11 @@ local joy__shushen = fk.CreateTriggerSkill{
 }
 local joy__shushen_trigger = fk.CreateTriggerSkill{
   name = "#joy__shushen_trigger",
+  main_skill = joy__shushen,
   mute = true,
   events = {fk.HpRecover},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill("joy__shushen")
+    return target == player and player:hasSkill(joy__shushen)
   end,
   on_trigger = function(self, event, target, player, data)
     self.cancel_cost = false
@@ -47,7 +50,7 @@ local joy__shushen_trigger = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     local room = player.room
     local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player),
-      function(p) return p.id end), 1, 1, "#joy__shushen-choose", "joy__shushen", true)
+      Util.IdMapper), 1, 1, "#joy__shushen-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
       return true
@@ -67,26 +70,27 @@ local joy__huangsi = fk.CreateTriggerSkill{
   frequency = Skill.Limited,
   events = {fk.AskForPeaches},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.dying and player:usedSkillTimes(self.name, Player.HistoryGame) == 0
+    return target == player and player:hasSkill(self) and player.dying and player:usedSkillTimes(self.name, Player.HistoryGame) == 0
   end,
   on_cost = function(self, event, target, player, data)
     return player.room:askForSkillInvoke(player, self.name, nil, "#joy__huangsi-invoke")
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local n = player:getHandcardNum()
     room:recover({
       who = player,
       num = 1 - player.hp,
       recoverBy = player,
       skillName = self.name
     })
-    player:throwAllCards("h")
+    local ids = table.filter(player:getCardIds("h"), function(id) return not player:prohibitDiscard(Fk:getCardById(id)) end)
+    if #ids == 0 then return end
+    room:throwCard(ids, self.name, player, player)
     if player.dead then return end
-    local to = room:askForChoosePlayers(player, table.map(room.alive_players, function(p)
-      return p.id end), 1, 1, "#joy__huangsi-choose:::"..(n + 2), self.name, true)
+    local to = room:askForChoosePlayers(player, table.map(room.alive_players, Util.IdMapper), 1, 1,
+    "#joy__huangsi-choose:::"..(#ids + 2), self.name, true)
     if #to > 0 then
-      room:getPlayerById(to[1]):drawCards(n + 1, self.name)
+      room:getPlayerById(to[1]):drawCards(#ids + 2, self.name)
     end
   end,
 }
@@ -98,11 +102,11 @@ Fk:loadTranslationTable{
   ["joy__shushen"] = "淑慎",
   [":joy__shushen"] = "当一名角色受到伤害时，你可以失去1点体力并防止此伤害，然后你与其各摸一张牌；当你回复1点体力后，你可以令一名其他角色摸一张牌。",
   ["joy__huangsi"] = "皇思",
-  [":joy__huangsi"] = "限定技，当你处于濒死状态时，你可以回复体力至1并弃置所有手牌，然后你可以令一名角色摸X+2张牌（X为你弃置的牌数）。",
+  [":joy__huangsi"] = "限定技，当你处于濒死状态时，你可以回复体力至1点并弃置所有手牌，然后你可以令一名角色摸X+2张牌（X为你弃置的牌数）。",
   ["#joy__shushen-invoke"] = "淑慎：你可以失去1点体力防止 %dest 受到的伤害，然后你与其各摸一张牌",
   ["#joy__shushen-choose"] = "淑慎：你可以令一名其他角色摸一张牌",
   ["#joy__huangsi-invoke"] = "皇思：你可以回复体力至1，弃置所有手牌",
-  ["#joy__huangsi-choose"] = "皇思：你可以令一名角色摸%arg张牌",
+  ["#joy__huangsi-choose"] = "皇思：你可以令一名角色摸 %arg 张牌",
 }
 
 local joy__caoang = General(extension, "joy__caoang", "wei", 4)
@@ -658,7 +662,7 @@ local joy__guose = fk.CreateTriggerSkill{
   anim_type = "drawcard",
   events = {fk.AfterCardsMove},
   can_trigger = function(self, event, target, player, data)
-    if player:hasSkill(self.name) then
+    if player:hasSkill(self) then
       for _, move in ipairs(data) do
         if move.from == player.id and move.extra_data and move.extra_data.joy__guose then
           return true
@@ -678,7 +682,7 @@ local joy__guose = fk.CreateTriggerSkill{
 
   refresh_events = {fk.BeforeCardsMove},
   can_refresh = function(self, event, target, player, data)
-    if player:hasSkill(self.name) then
+    if player:hasSkill(self) then
       for _, move in ipairs(data) do
         if move.from == player.id then
           for _, info in ipairs(move.moveInfo) do
@@ -712,7 +716,7 @@ local joy__anxian = fk.CreateTriggerSkill{
   mute = true,
   events = {fk.TargetSpecifying, fk.TargetConfirming},
   can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self.name) and data.card and data.card.trueName == "slash" then
+    if target == player and player:hasSkill(self) and data.card and data.card.trueName == "slash" then
       if event == fk.TargetSpecifying then
         return not table.contains(data.card.skillNames, self.name)
       else
@@ -724,7 +728,7 @@ local joy__anxian = fk.CreateTriggerSkill{
     if event == fk.TargetSpecifying then
       for _, id in ipairs(AimGroup:getAllTargets(data.tos)) do
         local p = player.room:getPlayerById(id)
-        if not player.dead and player:hasSkill(self.name) and not p.dead and not p:isKongcheng() then
+        if not player.dead and player:hasSkill(self) and not p.dead and not p:isKongcheng() then
           self:doCost(event, target, player, id)
         end
       end
@@ -833,7 +837,7 @@ local joy__luoyan = fk.CreateTriggerSkill{
   frequency = Skill.Compulsory,
   events = {fk.AfterSkillEffect},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and data.name == "joy__xingwu"
+    return target == player and player:hasSkill(self) and data.name == "joy__xingwu"
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
@@ -864,7 +868,7 @@ local joy__huimou = fk.CreateTriggerSkill{
   anim_type = "support",
   events = {fk.CardUseFinished, fk.CardRespondFinished, fk.SkillEffect},
   can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self.name) and player.phase == Player.NotActive and
+    if target == player and player:hasSkill(self) and player.phase == Player.NotActive and
       table.find(player.room.alive_players, function(p) return not p.faceup end) then
       if event == fk.SkillEffect then
         return data.name == "joyex__tianxiang"
@@ -908,7 +912,7 @@ local joy__jinghong = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and player.phase == Player.Start and
+    return target == player and player:hasSkill(self) and player.phase == Player.Start and
       table.find(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
   end,
   on_cost = function(self, event, target, player, data)
