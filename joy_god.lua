@@ -585,8 +585,7 @@ Fk:loadTranslationTable{
 
 
 
--- 由于恶性BUG封印神左慈：牌进入和离开void区先后发生后，可能造成错误移动，导致客户端错误地保留或删除了某些牌
---[[
+
 local joy__godzuoci = General(extension, "joy__godzuoci", "god", 3)
 
 GetHuanPile = function (room)
@@ -684,8 +683,7 @@ local joy__huanshu = fk.CreateTriggerSkill{
         end
       end
       if #cards == 0 then return end
-      room:delay(500)
-      -- 暂无不产生移动的换牌方式
+      --- FIXME:暂无不产生移动的换牌方式，或者直接改变牌位置的方式
       room:moveCardTo(cards, Card.Void, nil, fk.ReasonJustMove, self.name)
       if player.dead then return end
       local pile = GetHuanPile(room)
@@ -700,6 +698,12 @@ local joy__huanshu = fk.CreateTriggerSkill{
         end
       end
       if #get > 0 then
+        room:delay(300)
+        -- FIXME:心变智慧，防止从虚空区拿出id为-1的暗牌
+        for _, id in ipairs(get) do
+          table.removeOne(room.void, id)
+          room:setCardArea(id, Card.DrawPile)
+        end
         room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name)
       end
     elseif event == fk.AfterCardsMove then
@@ -815,7 +819,7 @@ Fk:loadTranslationTable{
   ["$joy__huanjing2"] = "金丹九转，变化万端！",
   ["~joy__godzuoci"] = "当世荣华，不足贪……",
 }
---]]
+
 
 local joy__goddaxiaoqiao = General(extension, "joy__goddaxiaoqiao", "god", 4, 4, General.Female)
 
