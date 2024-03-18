@@ -5,6 +5,8 @@ Fk:loadTranslationTable{
   ["joy_yj"] = "欢乐-一将成名",
 }
 
+local U = require "packages/utility/utility"
+
 -- yj2011
 local yujin = General(extension, "joy__yujin", "wei", 4)
 local yizhong = fk.CreateTriggerSkill{
@@ -24,6 +26,145 @@ Fk:loadTranslationTable{
   ["joy__yujin"] = "于禁",
   ["joy__yizhong"] = "毅重",
   [":joy__yizhong"] = "锁定技，若你的装备区没有牌，梅花【杀】对你无效。",
+}
+
+local caozhi = General(extension, "joy__caozhi", "wei", 3)
+local luoying = fk.CreateTriggerSkill{
+  name = "joy__luoying",
+  anim_type = "drawcard",
+  events = {fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) then
+      local ids = {}
+      local room = player.room
+      for _, move in ipairs(data) do
+        if move.toArea == Card.DiscardPile then
+          if move.moveReason == fk.ReasonDiscard and move.from and move.from ~= player.id then
+            for _, info in ipairs(move.moveInfo) do
+              if (info.fromArea == Card.PlayerHand or info.fromArea == Card.PlayerEquip) and
+              Fk:getCardById(info.cardId).suit == Card.Club and
+              room:getCardArea(info.cardId) == Card.DiscardPile then
+                table.insertIfNeed(ids, info.cardId)
+              end
+            end
+          elseif move.moveReason == fk.ReasonJudge then
+            local judge_event = room.logic:getCurrentEvent():findParent(GameEvent.Judge)
+            if judge_event and judge_event.data[1].who ~= player then
+              for _, info in ipairs(move.moveInfo) do
+                if info.fromArea == Card.Processing and Fk:getCardById(info.cardId).suit == Card.Club and
+                room:getCardArea(info.cardId) == Card.DiscardPile then
+                  table.insertIfNeed(ids, info.cardId)
+                end
+              end
+            end
+          end
+        end
+      end
+      ids = U.moveCardsHoldingAreaCheck(room, ids)
+      if #ids > 0 then
+        self.cost_data = ids
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local ids = table.simpleClone(self.cost_data)
+    if #ids > 1 then
+      local cards, _ = U.askforChooseCardsAndChoice(player, ids, {"OK"}, self.name,
+      "#joy__luoying-choose", {"joy__get_all"}, 1, #ids)
+      if #cards > 0 then
+        ids = cards
+      end
+    end
+    room:moveCardTo(ids, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+  end,
+}
+local luoying_maxcards = fk.CreateMaxCardsSkill{
+  name = "#luoying_maxcards",
+  exclude_from = function(self, player, card)
+    return player:hasSkill("joy__luoying") and card.suit == Card.Club
+  end,
+}
+local jiushi = fk.CreateViewAsSkill{
+  name = "joy__jiushi",
+  anim_type = "support",
+  prompt = "#joy__jiushi-active",
+  pattern = "analeptic",
+  card_filter = Util.FalseFunc,
+  before_use = function(self, player)
+    player:turnOver()
+  end,
+  view_as = function(self)
+    local c = Fk:cloneCard("analeptic")
+    c.skillName = self.name
+    return c
+  end,
+  enabled_at_play = function (self, player)
+    return player.faceup
+  end,
+  enabled_at_response = function (self, player)
+    return player.faceup
+  end,
+}
+local jiushi_trigger = fk.CreateTriggerSkill{
+  name = "#joy__jiushi_trigger",
+  mute = true,
+  main_skill = jiushi,
+  events = {fk.Damaged, fk.TurnedOver},
+  can_trigger = function(self, event, target, player, data)
+    if target == player then
+      if event == fk.Damaged then
+        return (data.extra_data or {}).jiushi_check
+      elseif event == fk.TurnedOver then
+        return player:hasSkill(jiushi)
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    return event == fk.TurnedOver or player.room:askForSkillInvoke(player, jiushi.name)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    player:broadcastSkillInvoke(jiushi.name)
+    if event == fk.Damaged then
+      room:notifySkillInvoked(player, jiushi.name, "defensive")
+      player:turnOver()
+    elseif event == fk.TurnedOver and not player.dead then
+      room:notifySkillInvoked(player, jiushi.name, "drawcard")
+      local cards = room:getCardsFromPileByRule(".|.|.|.|.|trick")
+      if #cards > 0 then
+        room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+      end
+    end
+  end,
+
+  refresh_events = {fk.DamageInflicted},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and player:hasSkill(jiushi) and not player.faceup
+  end,
+  on_refresh = function(self, event, target, player, data)
+    data.extra_data = data.extra_data or {}
+    data.extra_data.jiushi_check = true
+  end,
+}
+luoying:addRelatedSkill(luoying_maxcards)
+jiushi:addRelatedSkill(jiushi_trigger)
+caozhi:addSkill(luoying)
+caozhi:addSkill(jiushi)
+Fk:loadTranslationTable{
+  ["joy__caozhi"] = "曹植",
+  ["#joy__caozhi"] = "八斗之才",
+
+  ["joy__luoying"] = "落英",
+  [":joy__luoying"] = "①当其他角色的牌因弃置或判定进入弃牌堆后，你可以获得之；②你的梅花牌不计入手牌上限。",
+  ["joy__jiushi"] = "酒诗",
+  [":joy__jiushi"] = "①若你的武将牌正面朝上，你可以翻面视为使用一张【酒】；<br>②当你受到伤害时，若你的武将牌背面朝上，你可以在受到伤害后翻至正面;<br>③当你翻面时，你获得牌堆中的一张随机锦囊牌。",
+  ["#joy__jiushi_trigger"] = "酒诗",
+  ["#joy__jiushi-active"] = "酒诗：你可以翻到背面视为使用一张【酒】",
+
+  ["#joy__luoying-choose"] = "落英：选择要获得的牌",
+  ["joy__get_all"] = "全部获得",
 }
 
 local wuguotai = General(extension, "joy__wuguotai", "wu", 3, 3, General.Female)
@@ -180,9 +321,6 @@ Fk:loadTranslationTable{
   ["joy__ganlu_active"] = "甘露",
   ["joy__ganlu_move"] = "移动场上的一张装备牌",
   ["joy__ganlu_exchange"] = "交换两名角色副类别相同的装备牌",
-  [""] = "",
-  [""] = "",
-  [""] = "",
   ["#joy__buyi-invoke"] = "补益：你可以展示 %dest 的一张手牌，若为基本牌，其弃置并回复1点体力",
 }
 

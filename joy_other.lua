@@ -37,8 +37,9 @@ local joy__daoyao = fk.CreateActiveSkill{
   anim_type = "drawcard",
   card_num = 1,
   target_num = 0,
+  prompt = "#joy__daoyao-prompt",
   can_use = function(self, player)
-    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0 and not player:isKongcheng()
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
   end,
   card_filter = function(self, to_select, selected)
     return #selected == 0 and Fk:currentRoom():getCardArea(to_select) ~= Player.Equip and
@@ -151,6 +152,7 @@ Fk:loadTranslationTable{
   
   ["joy__daoyao"] = "捣药",
   [":joy__daoyao"] = "出牌阶段限一次，你可以弃置一张手牌，从牌堆获得一张【桃】并摸两张牌，若牌堆没有【桃】，改为摸三张牌。",
+  ["#joy__daoyao-prompt"] = "捣药:弃置一张手牌，从牌堆获得一张【桃】并摸两张牌",
 
   ["joy__benyue"] = "奔月",
   [":joy__benyue"] = "觉醒技，当你摸到【桃】后若你有至少三张【桃】，或你累计回复3点体力后，你将体力上限增加至15，并获得技能〖广寒〗。",

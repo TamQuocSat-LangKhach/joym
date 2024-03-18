@@ -621,7 +621,7 @@ GetHuanCard = function (player, n, skillName)
   if get_num > 0 then
     local pile = GetHuanPile(room)
     if #pile > 0 then
-      room:moveCardTo(table.random(pile, get_num), Card.PlayerHand, player, fk.ReasonPrey, skillName)
+      room:moveCardTo(table.random(pile, get_num), Card.PlayerHand, player, fk.ReasonPrey, skillName, nil, false, player.id)
     end
   end
   if not player.dead and draw_num > 0 then
@@ -684,7 +684,7 @@ local joy__huanshu = fk.CreateTriggerSkill{
       end
       if #cards == 0 then return end
       --- FIXME:暂无不产生移动的换牌方式，或者直接改变牌位置的方式
-      room:moveCardTo(cards, Card.Void, nil, fk.ReasonJustMove, self.name)
+      room:moveCardTo(cards, Card.Void, nil, fk.ReasonJustMove, self.name, nil, true)
       if player.dead then return end
       local pile = GetHuanPile(room)
       local get = {}
@@ -699,15 +699,10 @@ local joy__huanshu = fk.CreateTriggerSkill{
       end
       if #get > 0 then
         room:delay(300)
-        -- FIXME:心变智慧，防止从虚空区拿出id为-1的暗牌
-        for _, id in ipairs(get) do
-          table.removeOne(room.void, id)
-          room:setCardArea(id, Card.DrawPile)
-        end
         room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name)
       end
     elseif event == fk.AfterCardsMove then
-      room:moveCardTo(self.cost_data, Card.Void, nil, fk.ReasonJustMove, self.name)
+      room:moveCardTo(self.cost_data, Card.Void, nil, fk.ReasonJustMove, self.name, nil, true)
       if not player.dead then
         player:drawCards(1, self.name)
       end
