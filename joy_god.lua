@@ -597,6 +597,7 @@ GetHuanPile = function (room)
       local c = Fk:getCardById(id, true)
       if not c.is_derived then
         local card = room:printCard(c.name, c.suit, c.number)
+        room:setCardMark(card, MarkEnum.DestructIntoDiscard, 1)
         room:setCardMark(card, "@@joy__huanshu_card", 1)
         table.insert(cards, card.id)
       end
@@ -792,7 +793,7 @@ Fk:loadTranslationTable{
   ["joy__godzuoci"] = "神左慈",
 
   ["joy__huanshu"] = "幻术",
-  [":joy__huanshu"] = "锁定技，每当你受到1点伤害后及每轮开始时，你获得两张幻术牌（幻术牌为开启牌中随机牌的复制），幻术牌不计入手牌上限且数量至多为你体力上限的两倍（若已达幻术牌上限，超出上限的部分将改为摸等量的牌）；出牌阶段开始时，手牌中所有未“幻化”的幻术牌将变换为同花色的其他牌；其他角色获得幻术牌后销毁之，然后你摸一张牌。",
+  [":joy__huanshu"] = "锁定技，每当你受到1点伤害后及每轮开始时，你获得两张幻术牌（幻术牌为开启牌堆的复制，进入弃牌堆销毁），幻术牌不计入手牌上限且数量至多为你体力上限的两倍（若已达幻术牌上限，超出上限的部分将改为摸等量的牌）；出牌阶段开始时，手牌中所有未“幻化”的幻术牌将变换为同花色的其他牌；其他角色获得幻术牌后销毁之，然后你摸一张牌。",
   ["@@joy__huanshu_card"] = "幻术",
 
   ["joy__huanhua"] = "幻化",
