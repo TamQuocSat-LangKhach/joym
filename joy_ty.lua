@@ -880,6 +880,202 @@ Fk:loadTranslationTable{
   ["#joy__guanwei-invoke"] = "观微：你可以弃置一张牌，令 %dest 摸两张牌并执行一个额外的出牌阶段",
 }
 
+local xushao = General(extension, "joy__xushao", "qun", 4)
+
+local pingjian_skills = {
+  -- 出牌阶段
+  ["play"] =
+  {
+  "nya__lijian","nya__guose","nya__jieyi","joy__daoyao","joy__tuantu","joyex__lijian","joy__shenglun","joyex__qiangxi",
+  "joy__jueyan","joy__huairou","joy__qice","joy__kuangbi","joy__mingjian","joy__huoxin","joy__poxi","shencai","joy__yingba","ol__xuehen",
+  "joy__xingwu","joy__guolun","joysp__juesi","joy__lihun","joy_mou__kurou","xieju","duanfa","jiezhen","joy__mingjian",
+  "ty__gushe","anzhi","zhuren","jinghe","jinhui","joy__wengua","kurou","joy__duwu","joy__anguo","joy__god_huishi","joy__zuoxing",
+  "zhanhuo","joy__jianshu","zunwei","joysp__weikui","joy__manwang","joy__jixu","joy__xiaowu","joy__channi","joy__quanji","joy__paiyi",
+  "ty__zhongjian","joy__weilie","joy__yanjiao","joyex__zhiheng","joyex__jieyi","joyex__wanrong","joyex__qixi","joy__xianzhu","joy__youyan",
+  "limu","joy_mou__duojing","joy_mou__luanji","joyex__qingnang","joy__difa","ty_ex__wurong","joyex__changbiao","joy_mou__qingzheng","joy__chenglue","joy_mou__rende",
+  },
+  --受到伤害后 
+  [fk.Damaged] =
+  {
+    "joyex__fankui","ex__yiji","joyex__jianxiong","joy__fangzhu","joy__zhiyu","huituo","joy__jieying","joy__guixin",
+    "joy__chouce","ex__jianxiong","yuqi","qianlong","lundao","joy_mou__jianxiong","joy__shunshi","joy__chengxiang",
+    "wangxi","joy__jilei","joy__xingshen","ex__ganglie","joy__benyu","joy__shefu","joy__baobian","zhichi","joy__quanji","joy__jiushi",
+  },
+  --结束阶段
+  [fk.EventPhaseStart] =
+  {
+    "nya__biyue","nya__miji","joyex__biyue","ty_ex__zhenjun","joy__jujian","joy__jieying","joy__meihun","joy__shenfu","joy__benghuai",
+    "mozhi","joy__youdi","joy__fujian","joy__dianhua","gongxiu","guanyue","ex__biyue","zhiyan","zhukou","fuxue","nya__luoshen",
+    "zhengu","joy__zuilun","joy__yingyu","joy__guanxing","joysp__kunfen","joysp__lizhan","joy__xunxun","joy__shefu","joy__yishe","joy_mou__shipo","joy__zhuihuan",
+  }
+}
+
+local getPingjianSkills = function (player, event)
+  local used_skills = U.getMark(player, "joy__pingjian_used")
+  local e = event and event or "play"
+  return table.filter(pingjian_skills[e], function (skill_name)
+    local sk = Fk.skills[skill_name]
+    return sk and not table.contains(used_skills, skill_name) and not player:hasSkill(sk, true)
+  end)
+end
+
+---@param player ServerPlayer
+local addTYPingjianSkill = function(player, skill_name)
+  local room = player.room
+  local skill = Fk.skills[skill_name]
+  if skill == nil or player:hasSkill(skill_name, true) then return false end
+  room:handleAddLoseSkills(player, skill_name, nil)
+  local skills = U.getMark(player, "joy__pingjian_skills")
+  table.insertIfNeed(skills, skill_name)
+  room:setPlayerMark(player, "joy__pingjian_skills", skills)
+  local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+  table.insert(pingjian_skill_times, {skill_name, player:usedSkillTimes(skill_name)})
+  for _, s in ipairs(skill.related_skills) do
+    table.insert(pingjian_skill_times, {s.name, player:usedSkillTimes(s.name)})
+  end
+  room:setPlayerMark(player, "joy__pingjian_skill_times", pingjian_skill_times)
+end
+
+---@param player ServerPlayer
+local removeTYPingjianSkill = function(player, skill_name)
+  local room = player.room
+  local skill = Fk.skills[skill_name]
+  if skill == nil then return false end
+  room:handleAddLoseSkills(player, "-" .. skill_name, nil)
+  local skills = U.getMark(player, "joy__pingjian_skills")
+  table.removeOne(skills, skill_name)
+  room:setPlayerMark(player, "joy__pingjian_skills", skills)
+  local invoked = false
+  local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+  local record_copy = {}
+  for _, pingjian_record in ipairs(pingjian_skill_times) do
+    if #pingjian_record == 2 then
+      local record_name = pingjian_record[1]
+      if record_name == skill_name or not table.every(skill.related_skills, function (s)
+          return s.name ~= record_name end) then
+        if player:usedSkillTimes(record_name) > pingjian_record[2] then
+          invoked = true
+        end
+      else
+        table.insert(record_copy, pingjian_record)
+      end
+    end
+  end
+  room:setPlayerMark(player, "joy__pingjian_skill_times", record_copy)
+
+  if invoked then
+    local used_skills = U.getMark(player, "joy__pingjian_used")
+    table.insertIfNeed(used_skills, skill_name)
+    room:setPlayerMark(player, "joy__pingjian_used", used_skills)
+  end
+end
+
+local joy__pingjian = fk.CreateActiveSkill{
+  name = "joy__pingjian",
+  prompt = "#joy__pingjian-active",
+  card_num = 0,
+  target_num = 0,
+  card_filter = Util.FalseFunc,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local skills = getPingjianSkills(player)
+    if #skills == 0 then return false end
+    local choices = table.random(skills, 3)
+    local skill_name = room:askForChoice(player, choices, self.name, "#joy__pingjian-choice", true)
+    local phase_event = room.logic:getCurrentEvent():findParent(GameEvent.Phase)
+    if phase_event ~= nil then
+      addTYPingjianSkill(player, skill_name)
+      phase_event:addCleaner(function()
+        removeTYPingjianSkill(player, skill_name)
+      end)
+    end
+  end,
+}
+local joy__pingjian_trigger = fk.CreateTriggerSkill{
+  name = "#joy__pingjian_trigger",
+  events = {fk.Damaged, fk.EventPhaseStart},
+  main_skill = joy__pingjian,
+  mute = true,
+  can_trigger = function(self, event, target, player, data)
+    if not player:hasSkill(joy__pingjian) or player ~= target then return false end
+    if event == fk.Damaged then
+      return true
+    elseif event == fk.EventPhaseStart then
+      return player.phase == Player.Finish
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:notifySkillInvoked(player, joy__pingjian.name)
+    player:broadcastSkillInvoke(joy__pingjian.name)
+    local skills = getPingjianSkills(player, event)
+    if #skills == 0 then return false end
+    local choices = table.random(skills, 3)
+    local skill_name = room:askForChoice(player, choices, joy__pingjian.name, "#joy__pingjian-choice", true)
+    local skill = Fk.skills[skill_name]
+    if skill == nil then return false end
+    local _skill = skill
+    if not _skill:isInstanceOf(TriggerSkill) then
+      _skill = table.find(_skill.related_skills, function (s)
+        return s:isInstanceOf(TriggerSkill)
+      end)
+      if not _skill then return end
+    end
+
+    addTYPingjianSkill(player, skill_name)
+    if _skill:triggerable(event, target, player, data) then
+      _skill:trigger(event, target, player, data)
+    end
+    removeTYPingjianSkill(player, skill_name)
+  end,
+
+  refresh_events = {fk.DamageInflicted},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and not player.faceup
+  end,
+  on_refresh = function(self, event, target, player, data)
+    data.extra_data = data.extra_data or {}
+    data.extra_data.jiushi_check = true
+  end,
+}
+local joy__pingjian_invalidity = fk.CreateInvaliditySkill {
+  name = "#joy__pingjian_invalidity",
+  invalidity_func = function(self, player, skill)
+    local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+    return table.find(pingjian_skill_times, function (pingjian_record)
+      if #pingjian_record == 2 then
+        local skill_name = pingjian_record[1]
+        if skill.name == skill_name or not table.every(skill.related_skills, function (s)
+          return s.name ~= skill_name end) then
+            return player:usedSkillTimes(skill_name) > pingjian_record[2]
+        end
+      end
+    end)
+  end
+}
+
+joy__pingjian:addRelatedSkill(joy__pingjian_trigger)
+joy__pingjian:addRelatedSkill(joy__pingjian_invalidity)
+xushao:addSkill(joy__pingjian)
+
+Fk:loadTranslationTable{
+  ["joy__xushao"] = "许劭",
+  ["#joy__xushao"] = "识人读心",
+  
+  ["joy__pingjian"] = "评荐",
+  ["#joy__pingjian_trigger"] = "评荐",
+  [":joy__pingjian"] = "出牌阶段，或结束阶段，或当你受到伤害后，你可以从对应时机的技能池中随机抽取三个技能，"..
+    "然后你选择并视为拥有其中一个技能直到时机结束（每个技能限发动一次）。",
+  ["#joy__pingjian-active"] = "评荐：从三个出牌阶段的技能中选择一个学习",
+  ["#joy__pingjian-choice"] = "评荐：选择要学习的技能",
+}
+
+
+
+
 
 
 return extension

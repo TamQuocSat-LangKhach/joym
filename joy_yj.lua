@@ -113,11 +113,11 @@ local jiushi_trigger = fk.CreateTriggerSkill{
   main_skill = jiushi,
   events = {fk.Damaged, fk.TurnedOver},
   can_trigger = function(self, event, target, player, data)
-    if target == player then
+    if target == player and player:hasSkill(jiushi) then
       if event == fk.Damaged then
-        return (data.extra_data or {}).jiushi_check
-      elseif event == fk.TurnedOver then
-        return player:hasSkill(jiushi)
+        return not player.faceup and (data.extra_data or {}).jiushi_check
+      else
+        return true
       end
     end
   end,
@@ -141,7 +141,7 @@ local jiushi_trigger = fk.CreateTriggerSkill{
 
   refresh_events = {fk.DamageInflicted},
   can_refresh = function(self, event, target, player, data)
-    return target == player and player:hasSkill(jiushi) and not player.faceup
+    return target == player and not player.faceup
   end,
   on_refresh = function(self, event, target, player, data)
     data.extra_data = data.extra_data or {}
@@ -364,14 +364,14 @@ local joy__zhiyu = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     player:drawCards(2, self.name)
-    if not player.dead and not player:isKongcheng() then
-      room:askForDiscard(player, 1, 1, false, self.name, false)
+    if not player.dead and not player:isNude() then
+      room:askForDiscard(player, 1, 1, true, self.name, false)
     end
     local cards = table.simpleClone(player:getCardIds("h"))
     player:showCards(cards)
     if player.dead or not data.from or data.from.dead or data.from:getHandcardNum() <= player:getHandcardNum() then return end
-    if table.every(cards, function(id) return #cards == 0 or Fk:getCardById(id).color == Fk:getCardById(cards[1]).color end) and
-      room:askForSkillInvoke(player, self.name, nil, "#joy__zhiyu-discard::"..data.from.id) then
+    if (#cards == 0 or table.every(cards, function(id) return Fk:getCardById(id).color == Fk:getCardById(cards[1]).color end))
+      and room:askForSkillInvoke(player, self.name, nil, "#joy__zhiyu-discard::"..data.from.id) then
       room:doIndicate(player.id, {data.from.id})
       local n = data.from:getHandcardNum() - player:getHandcardNum()
       room:askForDiscard(data.from, n, n, false, self.name, false)
@@ -388,6 +388,110 @@ Fk:loadTranslationTable{
   [":joy__zhiyu"] = "当你受到伤害后，你可以摸两张牌并弃置一张牌，然后展示所有手牌，若颜色均相同，你可以令伤害来源将手牌弃至与你相同。",
   ["#joy__qice"] = "奇策：你可以将任意张手牌当一张普通锦囊牌使用",
   ["#joy__zhiyu-discard"] = "智愚：你可以令 %dest 将手牌弃至与你相同",
+}
+
+local zhonghui = General(extension, "joy__zhonghui", "wei", 3)
+local quanji = fk.CreateActiveSkill{
+  name = "joy__quanji",
+  anim_type = "control",
+  min_card_num = 1,
+  derived_piles = "joy__zhonghui_quan",
+  can_use = function(self, player)
+    return not player:isKongcheng()
+  end,
+  card_filter = function(self, to_select, selected)
+    return table.contains(Self.player_cards[Player.Hand], to_select)
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    player:addToPile("joy__zhonghui_quan", effect.cards, true, self.name)
+  end,
+}
+local quanji_trigger = fk.CreateTriggerSkill{
+  name = "#joy__quanji_trigger",
+  anim_type = "drawcard",
+  main_skill = quanji,
+  events = {fk.Damaged},
+  on_trigger = function(self, event, target, player, data)
+    self.cancel_cost = false
+    for i = 1, data.damage do
+      if self.cancel_cost or not player:hasSkill(quanji) then break end
+      self:doCost(event, target, player, data)
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    if room:askForSkillInvoke(player, self.name) then
+      return true
+    end
+    self.cancel_cost = true
+  end,
+  on_use = function(self, event, target, player, data)
+    player:drawCards(2, self.name)
+  end,
+}
+local quanji_maxcards = fk.CreateMaxCardsSkill{
+  name = "#joy__quanji_maxcards",
+  correct_func = function(self, player)
+    if player:hasSkill(quanji) then
+      return math.min(#player:getPile("joy__zhonghui_quan"), 5)
+    end
+  end,
+}
+quanji:addRelatedSkill(quanji_trigger)
+quanji:addRelatedSkill(quanji_maxcards)
+zhonghui:addSkill(quanji)
+local paiyi = fk.CreateActiveSkill{
+  name = "joy__paiyi",
+  anim_type = "control",
+  card_num = 1,
+  target_num = 1,
+  prompt = "#joy__paiyi-prompt",
+  expand_pile = "joy__zhonghui_quan",
+  can_use = function(self, player)
+    return #player:getPile("joy__zhonghui_quan") > 0 and player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  target_filter = function(self, to_select, selected, cards)
+    return #selected == 0 and #cards == 1
+  end,
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Self:getPileNameOfId(to_select) == "joy__zhonghui_quan"
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local to = room:getPlayerById(effect.tos[1])
+    room:moveCards({
+      from = player.id,
+      ids = effect.cards,
+      toArea = Card.DiscardPile,
+      moveReason = fk.ReasonPutIntoDiscardPile,
+      skillName = self.name,
+    })
+    if to.dead then return end
+    to:drawCards(2, self.name)
+    if to.dead then return end
+    if to:getHandcardNum() > player:getHandcardNum() then
+      room:damage{
+        from = player,
+        to = to,
+        damage = 1,
+        skillName = self.name,
+      }
+    end
+  end,
+}
+zhonghui:addSkill(paiyi)
+Fk:loadTranslationTable{
+  ["joy__zhonghui"] = "钟会",
+  ["#joy__zhonghui"] = "桀骜的野心家",
+
+  ["joy__quanji"] = "权计",
+  [":joy__quanji"] = "每当你受到1点伤害后，你可以摸两张牌；出牌阶段，可以将任意张手牌置于武将牌上，称为“权”。你的手牌上限+X（X为“权的数量且最大为5）。",
+  ["joy__paiyi"] = "排异",
+  [":joy__paiyi"] = "出牌阶段限一次，你可以将一张“权”置入弃牌堆，令一名角色摸两张牌，然后若该角色的手牌数大于你的手牌数，你对其造成一点伤害。",
+  ["#joy__paiyi-prompt"] = "权计：移去一张“权”，令一名角色摸两张牌，若其手牌数大于你，你对其造成伤害",
+  ["joy__zhonghui_quan"] = "权",
+  ["#joy__quanji_trigger"] = "权计",
 }
 
 local fuhuanghou = General(extension, "joy__fuhuanghou", "qun", 3, 3, General.Female)
