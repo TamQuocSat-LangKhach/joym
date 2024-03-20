@@ -9,26 +9,220 @@ local U = require "packages/utility/utility"
 
 -- 限时地主武将，以及难以分类的武将
 
+local joy__libai = General(extension, "joy__libai", "qun", 3)
 
+local joy__shixian = fk.CreateTriggerSkill{
+  name = "joy__shixian",
+  events = {fk.TurnStart},
+  anim_type = "drawcard",
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, _, target, player, data)
+    return player:hasSkill(self) and target == player
+  end,
+  on_use = function(self, _, target, player, data)
+    local room = player.room
+    local names = {"joy__xiakexing", "joy__qiangjinjiu", "joy__jingyesi", "joy__xinglunan"}
+    room:handleAddLoseSkills(player, "-"..table.concat(names, "|-"))
+    local cards = room:getNCards(4)
+    room:moveCardTo(cards, Card.Processing, nil, fk.ReasonPut, self.name)
+    room:delay(1000)
+    local map = {}
+    for _, id in ipairs(cards) do
+      local suit = Fk:getCardById(id).suit
+      map[suit] = map[suit] or {}
+      table.insert(map[suit], id)
+    end
+    local get = {}
+    for suit, ids in pairs(map) do
+      room:handleAddLoseSkills(player, names[suit])
+      if #ids > 1 then
+        table.insertTable(get, ids)
+      end
+    end
+    if #get > 0 and not player.dead then
+      room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name)
+    end
+    cards = table.filter(cards, function(id) return Fk:getCardById(id) == Card.Processing end)
+    if #cards > 0 then
+      room:moveCards({
+        ids = cards,
+        toArea = Card.DiscardPile,
+        moveReason = fk.ReasonPutIntoDiscardPile,
+      })
+    end
+  end,
+}
+joy__libai:addSkill(joy__shixian)
 
+local joy__jingyesi = fk.CreateTriggerSkill{
+  name = "joy__jingyesi",
+  events = {fk.EventPhaseEnd},
+  anim_type = "drawcard",
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and (player.phase == Player.Play or player.phase == Player.Discard)
+  end,
+  on_cost = function (self, event, target, player, data)
+    return player.phase == Player.Discard or player.room:askForSkillInvoke(player, self.name)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if player.phase == Player.Play then
+      local id = room:getNCards(1)[1]
+      table.insert(room.draw_pile, 1, id)
+      U.askForUseRealCard(room, player, {id}, ".", self.name, "#joy__jingyesi-use:::"..Fk:getCardById(id):toLogString(),
+      {expand_pile = {id}})
+    else
+      player:drawCards(1, self.name, "bottom")
+    end
+  end,
+}
+joy__libai:addRelatedSkill(joy__jingyesi)
 
+local joy__xinglunan = fk.CreateTriggerSkill{
+  name = "joy__xinglunan",
+  events = {fk.CardUseFinished},
+  anim_type = "defensive",
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target ~= player and data.card.trueName == "slash" and player ~= player.room.current
+    and table.contains(TargetGroup:getRealTargets(data.tos), player.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:addPlayerMark(player, "@@joy__xinglunan")
+  end,
 
+  refresh_events = {fk.TurnStart},
+  can_refresh = function (self, event, target, player, data)
+    return target == player and player:getMark("@@joy__xinglunan") > 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    player.room:setPlayerMark(player, "@@joy__xinglunan", 0)
+  end,
+}
+local joy__xinglunan_distance = fk.CreateDistanceSkill{
+  name = "#joy__xinglunan_distance",
+  correct_func = function(self, from, to)
+    return to:getMark("@@joy__xinglunan")
+  end,
+}
+joy__xinglunan:addRelatedSkill(joy__xinglunan_distance)
+joy__libai:addRelatedSkill(joy__xinglunan)
+
+local joy__xiakexing = fk.CreateTriggerSkill{
+  name = "joy__xiakexing",
+  events = {fk.CardUsing, fk.Damage},
+  anim_type = "offensive",
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and target == player then
+      if event == fk.CardUsing then
+        return data.card.sub_type == Card.SubtypeWeapon and string.find(Fk:translate(data.card.name, "zh_CN"), "剑") ~= nil
+      else
+        return player:getEquipment(Card.SubtypeWeapon) ~= nil and not data.to.dead and player:canPindian(data.to)
+      end
+    end
+  end,
+  on_cost = function (self, event, target, player, data)
+    return event == fk.CardUsing or player.room:askForSkillInvoke(player, self.name, nil, "#joy__xiakexing-invoke:"..data.to.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.CardUsing then
+      local card = Fk:cloneCard("archery_attack")
+      card.skillName = self.name
+      if not player:prohibitUse(card) and player:canUse(card) then
+        room:useCard{from = player.id, card = card, tos = {}}
+      end
+    else
+      local pindian = player:pindian({data.to}, self.name)
+      if pindian.results[data.to.id].winner == player then
+        room:changeMaxHp(data.to, -1)
+      else
+        local throw = player:getEquipments(Card.SubtypeWeapon)
+        if #throw > 0 then
+          room:throwCard(throw, self.name, player, player)
+        end
+      end
+    end
+  end,
+}
+joy__libai:addRelatedSkill(joy__xiakexing)
+
+local joy__qiangjinjiu = fk.CreateTriggerSkill{
+  name = "joy__qiangjinjiu",
+  events = {fk.EventPhaseStart},
+  anim_type = "control",
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target ~= player and target.phase == Player.Start and not player:isKongcheng()
+  end,
+  on_cost = function (self, event, target, player, data)
+    local cards = player.room:askForDiscard(player, 1, 1, false, self.name, true, ".", "#joy__qiangjinjiu-invoke:"..target.id, true)
+    if #cards > 0 then
+      self.cost_data = cards
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:throwCard(self.cost_data, self.name, player, player)
+    if player.dead or target.dead then return end
+    local choice = room:askForChoice(player, {"joy__qiangjinjiu_choice1", "joy__qiangjinjiu_choice2"}, self.name)
+    if choice:endsWith("1") then
+      local throw = target:getCardIds("e")
+      if #throw > 0 then
+        room:throwCard(throw, self.name, target, player)
+      end
+      if not target.dead then
+        local cards = room:getCardsFromPileByRule("analeptic")
+        if #cards > 0 then
+          room:moveCardTo(cards, Card.PlayerHand, target, fk.ReasonPrey, self.name, nil, true)
+        end
+      end
+    else
+      local cards = table.filter(target:getCardIds("h"), function(id) return Fk:getCardById(id).name == "analeptic" end)
+      if #cards == 0 and not target:isNude() then
+        cards = {room:askForCardChosen(player, target, "he", self.name)}
+      end
+      if #cards > 0 then
+        room:moveCardTo(cards, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, false, player.id)
+      end
+    end
+  end,
+}
+joy__libai:addRelatedSkill(joy__qiangjinjiu)
 
 Fk:loadTranslationTable{
   ["joy__libai"] = "李白",
   ["joy__shixian"] = "诗仙",
-  [":joy__shixian"] = "锁定技，准备阶段，你清除已有的诗篇并亮出牌堆顶四张牌，根据花色创作对应的诗篇：<font color='red'>♥</font>《静夜思》；"..
+  [":joy__shixian"] = "锁定技，回合开始时，你清除已有的诗篇并亮出牌堆顶四张牌，根据花色创作对应的诗篇：<font color='red'>♥</font>《静夜思》；"..
   "<font color='red'>♦</font>《行路难》；♠《侠客行》；♣《将进酒》。然后你获得其中重复花色的牌。",
-  ["jingyesi"] = "静夜思",
-  [":jingyesi"] = "出牌阶段结束时，你可以观看牌堆顶一张牌，然后可以使用此牌；弃牌阶段结束时，你获得牌堆底的一张牌。",
-  ["xinglunan"] = "行路难",
-  [":xinglunan"] = "锁定技，你的回合外，当其他角色对你使用【杀】结算后，直到你的回合开始，其他角色计算与你的距离+1。",
-  ["xiakexing"] = "侠客行",
-  [":xiakexing"] = "当你使用牌名中有“剑”的武器时，你视为使用一张【万箭齐发】；当你使用【杀】造成伤害后，若你装备了武器，你可以与其拼点："..
+  -- 三个字的技能会超出UI……
+  ["joy__jingyesi"] = "夜思",
+  [":joy__jingyesi"] = "出牌阶段结束时，你可以观看牌堆顶一张牌，然后可以使用此牌；弃牌阶段结束时，你获得牌堆底的一张牌。",
+  ["#joy__jingyesi-use"] = "静夜思：你可以使用 %arg",
+
+  ["joy__xinglunan"] = "路难",
+  [":joy__xinglunan"] = "锁定技，你的回合外，当其他角色对你使用的【杀】结算后，直到你的回合开始，其他角色计算与你的距离+1。",
+  ["@@joy__xinglunan"] = "路难",
+
+  ["joy__xiakexing"] = "侠行",
+  [":joy__xiakexing"] = "当你使用牌名中有“剑”的武器时，你视为使用一张【万箭齐发】；当你使用【杀】造成伤害后，若你装备了武器，你可以与其拼点："..
   "若你赢，其减1点体力上限；若你没赢，则弃置你装备区内的武器。",
-  ["qiangjinjiu"] = "将进酒",
-  [":qiangjinjiu"] = "其他角色准备阶段，你可以弃置一张手牌并选择一项：1.弃置其装备区内所有的装备，令其从牌堆中获得一张【酒】；"..
+  ["#joy__xiakexing-invoke"] = "侠客行：可以与 %src 拼点，若你赢，其减1点体力上限，否则弃置你的武器",
+
+  ["joy__qiangjinjiu"] = "进酒",
+  [":joy__qiangjinjiu"] = "其他角色准备阶段，你可以弃置一张手牌并选择一项：1.弃置其装备区内所有的装备，令其从牌堆中获得一张【酒】；"..
   "2.获得其手牌中所有【酒】，若其手牌中没有【酒】，则改为获得其一张牌。",
+  ["#joy__qiangjinjiu-invoke"] = "将进酒：你可以弃置一张手牌并对 %src 执行一项",
+  ["joy__qiangjinjiu_choice1"] = "弃置其装备区内所有的装备，令其从牌堆中获得一张【酒】",
+  ["joy__qiangjinjiu_choice2"] = "获得其手牌中所有【酒】，若没有【酒】，获得其一张牌",
+
+  ["$joy__shixian1"] = "吾乃诗仙李太白！",
+  ["$joy__shixian2"] = "笔落惊风雨，诗成泣鬼神！",
+  ["$joy__jingyesi1"] = "举头望明月，低头思故乡。",
+  ["$joy__xinglunan1"] = "行路难，行路难！多歧路，今安在？",
+  ["$joy__xiakexing1"] = "十步杀一人，千里不留行。",
+  ["$joy__qiangjinjiu1"] = "人生得意须尽欢，莫使金樽空对月。",
+  ["~joy__libai"] = "生者为过客，死者为归人。",
 }
 
 local joy__change = General(extension, "joy__change", "god", 1, 4, General.Female)
