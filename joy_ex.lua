@@ -203,6 +203,61 @@ Fk:loadTranslationTable{
   ["~joyex__simayi"] = "我的气数，就到这里了么？",
 }
 
+local xiahoudun = General(extension, "joyex__xiahoudun", "wei", 4)
+local qingjian = fk.CreateTriggerSkill{
+  name = "joyex__qingjian",
+  anim_type = "support",
+  events = {fk.AfterCardsMove},
+  can_trigger = function(self, event, target, player, data)
+    if player:hasSkill(self) and player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and player.phase ~= Player.Draw
+    and not player:isNude() then
+      for _, move in ipairs(data) do
+        if move.to == player.id and move.toArea == Player.Hand then
+          return true
+        end
+      end
+    end
+  end,
+  on_cost = function(self, event, target, player, data)
+    --- FIXME: fix askForChooseCardsAndPlayers
+    local _data = {
+      targets = table.map(player.room:getOtherPlayers(player), Util.IdMapper),
+      max_t_num = 1,
+      min_t_num = 1,
+      max_c_num = 9999,
+      min_c_num = 1,
+      pattern = ".",
+      skillName = self.name,
+      include_equip = true,
+    }
+    local _, ret = player.room:askForUseActiveSkill(player, "u_ex_choose_skill", "#joyex__qingjian-invoke", true, _data)
+    if ret then
+      self.cost_data = {ret.targets[1], ret.cards}
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data[1])
+    local cards = self.cost_data[2]
+    player:showCards(cards)
+    room:moveCardTo(cards, Player.Hand, to, fk.ReasonGive, self.name, nil, true, player.id)
+    if not player.dead then
+      player:drawCards(1,self.name)
+    end
+  end,
+}
+
+xiahoudun:addSkill("ex__ganglie")
+xiahoudun:addSkill(qingjian)
+Fk:loadTranslationTable{
+  ["joyex__xiahoudun"] = "界夏侯惇",
+
+  ["joyex__qingjian"] = "清俭",
+  [":joyex__qingjian"] = "每回合限一次，当你于摸牌阶段外获得牌后，你可以展示任意张牌并交给一名其他角色，然后摸一张牌。",
+  ["#joyex__qingjian-invoke"] = "清俭：你可以展示任意张牌并交给一名其他角色，然后摸一张牌",
+}
+
 local joyex__guojia = General(extension, "joyex__guojia", "wei", 3)
 
 local checkShenglunMark = function (player)
@@ -791,6 +846,116 @@ Fk:loadTranslationTable{
   ["#joyex__lianying-choose"] = "连营：你可以将一张手牌交给一名其他角色",
   ["#joyex__qianxun-card"] = "谦逊：你可以将至多 %arg 张手牌扣置武将牌上",
   ["#joyex__qianxun_delay"] = "谦逊",
+}
+
+local huatuo = General(extension, "joyex__huatuo", "qun", 3)
+local qingnang = fk.CreateActiveSkill{
+  name = "joyex__qingnang",
+  anim_type = "control",
+  min_target_num = 1,
+  prompt = "#joyex__qingnang",
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  card_filter = function (self, to_select, selected)
+    return not Self:prohibitDiscard(Fk:getCardById(to_select)) and #selected < (#Fk:currentRoom().alive_players - 1)
+  end,
+  target_filter = function (self, to_select, selected, selected_cards)
+    return #selected < #selected_cards + 1
+  end,
+  feasible = function (self, selected, selected_cards)
+    return #selected > 0 and #selected == #selected_cards + 1
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    if #effect.cards > 0 then
+      room:throwCard(effect.cards, self.name, player, player)
+    end
+    local tos = effect.tos
+    room:sortPlayersByAction(tos)
+    local mark = U.getMark(player, "joyex__qingnang_record")
+    for _, pid in ipairs(tos) do
+      local p = room:getPlayerById(pid)
+      if not p.dead then
+        table.insert(mark, p.id)
+        room:changeMaxHp(p, 1)
+        if p:isWounded() and not p.dead then
+          room:recover({ who = p, num = 1, recoverBy = player, skillName = self.name })
+        end
+      end
+    end
+    room:setPlayerMark(player, "joyex__qingnang_record", mark)
+  end,
+}
+local qingnang_trigger = fk.CreateTriggerSkill{
+  name = "#joyex__qingnag_trigger",
+  mute = true,
+  events = {fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and #U.getMark(player, "joyex__qingnang_record") > 0
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local tos = player:getMark("joyex__qingnang_record")
+    room:setPlayerMark(player, "joyex__qingnang_record", 0)
+    room:sortPlayersByAction(tos)
+    for _, pid in ipairs(tos) do
+      local p = room:getPlayerById(pid)
+      if not p.dead then
+        room:changeMaxHp(p, -1)
+      end
+    end
+  end,
+}
+qingnang:addRelatedSkill(qingnang_trigger)
+huatuo:addSkill(qingnang)
+local jijiu = fk.CreateViewAsSkill{
+  name = "joyex__jijiu",
+  anim_type = "support",
+  pattern = "peach",
+  card_filter = function(self, to_select, selected)
+    return #selected == 0 and Fk:getCardById(to_select).color == Card.Red
+  end,
+  view_as = function(self, cards)
+    if #cards ~= 1 then return nil end
+    local c = Fk:cloneCard("peach")
+    c.skillName = self.name
+    c:addSubcard(cards[1])
+    return c
+  end,
+  after_use = function(self, player, use)
+    local room = player.room
+    if player.dead then return end
+    local targets = table.filter(room:getOtherPlayers(player), function (p) return not p:isKongcheng() end)
+    if #targets == 0 then return false end
+    local tos = player.room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joyex__jijiu-choose", self.name, true)
+    if #tos > 0 then
+      local to = room:getPlayerById(tos[1])
+      local card = room:askForCardChosen(player, to, "h", self.name)
+      room:throwCard(card, self.name, to, player)
+    end
+  end,
+  enabled_at_play = function(self, player)
+    return false
+  end,
+  enabled_at_response = function(self, player, resp)
+    return player.phase == Player.NotActive and not resp
+  end,
+}
+huatuo:addSkill(jijiu)
+Fk:loadTranslationTable{
+  ["joyex__huatuo"] = "界华佗",
+  ["#joyex__huatuo"] = "神医",
+
+  ["joyex__qingnang"] = "青囊",
+  [":joyex__qingnang"] = "出牌阶段限一次，你可以选择任意名角色并弃置X-1张牌（X为你选择的角色数），然后令这些角色各增加一点体力上限并回复一点体力，你的下个回合开始时，减少所有以此法增加的体力上限。",
+  ["#joyex__qingnang"] = "青囊：选择任意名角色并弃置X-1张牌（X为选择角色数），令这些角色各增加一点体力上限并回复一点体力",
+  ["#joyex__qingnag_trigger"] = "青囊",
+
+  ["joyex__jijiu"] = "急救",
+  [":joyex__jijiu"] = "你的回合外，你可以将一张红色牌当【桃】使用，然后你可以弃置一名其他角色的一张手牌。",
+  ["#joyex__jijiu-choose"] = "急救：你可以弃置一名其他角色的一张手牌",
 }
 
 local diaochan = General(extension, "joyex__diaochan", "qun", 3, 3, General.Female)
