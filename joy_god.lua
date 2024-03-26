@@ -1370,7 +1370,7 @@ local joy__kuangxi = fk.CreateTriggerSkill{
   events = {fk.DamageCaused},
   can_trigger = function(self, event, target, player, data)
     return player:hasSkill(self) and target == player and
-    table.find(player.room.alive_players, function (p) return p:getMark("@@joy__secure") > 0 end)
+    table.find(player.room.alive_players, function (p) return p:getMark("@@joy__secure") ~= 0 end)
   end,
   on_use = function(self, event, target, player, data)
     data.damage = data.damage + 1

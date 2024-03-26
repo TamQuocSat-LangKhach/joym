@@ -1405,7 +1405,166 @@ Fk:loadTranslationTable{
   "出牌阶段结束时，你交给该角色X张牌（X为其体力值）。",
   ["joysp__biyue"] = "闭月",
   [":joysp__biyue"] = "回合结束阶段开始时，你可以摸一张牌，如你处于翻面状态，则摸三张牌。",
-
 }
+
+local yangxiu = General(extension, "joy__yangxiu", "wei", 3)
+local jilei = fk.CreateTriggerSkill{
+  name = "joy__jilei",
+  anim_type = "masochism",
+  events = {fk.Damaged},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self)
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil,
+    (data.from and not data.from.dead) and ("#joy__jilei-invoke::"..data.from.id) or "#joy__jilei-draw")
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local choice = room:askForChoice(player, {"basic", "trick", "equip"}, self.name)
+    local ids = room:getCardsFromPileByRule(".|.|.|.|.|"..choice)
+    if #ids > 0 then
+      room:moveCardTo(ids, Player.Hand, player, fk.ReasonPrey, self.name)
+    end
+    if data.from and not data.from.dead then
+      local mark = U.getMark(data.from, "@joy__jilei")
+      table.insertIfNeed(mark, choice .. "_char")
+      room:setPlayerMark(data.from, "@joy__jilei", mark)
+    end
+  end,
+
+  refresh_events = {fk.TurnStart},
+  can_refresh = function(self, event, target, player, data)
+    return target == player and player:getMark("@joy__jilei") ~= 0
+  end,
+  on_refresh = function(self, event, target, player, data)
+    player.room:setPlayerMark(player, "@joy__jilei", 0)
+  end,
+}
+local function jileiCheck (player, card)
+  local mark = player:getMark("@joy__jilei")
+  if type(mark) == "table" and table.contains(mark, card:getTypeString() .. "_char") then
+    local subcards = card:isVirtual() and card.subcards or {card.id}
+    return #subcards > 0 and table.every(subcards, function(id)
+      return table.contains(player.player_cards[Player.Hand], id)
+    end)
+  end
+  return false
+end
+local jilei_prohibit = fk.CreateProhibitSkill{
+  name = "#joy__jilei_prohibit",
+  prohibit_use = function(_, player, card)
+    return jileiCheck(player, card)
+  end,
+  prohibit_response = function(_, player, card)
+    return jileiCheck(player, card)
+  end,
+  prohibit_discard = function(_, player, card)
+    return jileiCheck(player, card)
+  end,
+}
+jilei:addRelatedSkill(jilei_prohibit)
+yangxiu:addSkill("ty__danlao")
+yangxiu:addSkill(jilei)
+Fk:loadTranslationTable{
+  ["joy__yangxiu"] = "杨修",
+  ["#joy__yangxiu"] = "恃才放旷",
+
+  ["joy__jilei"] = "鸡肋",
+  [":joy__jilei"] = "当你受到伤害后，你可以声明一种牌的类别，然后获得一张该类别的牌，并令伤害来源不能使用、打出或弃置你声明的此类别的手牌直到其下回合开始。",
+  ["#joy__jilei-invoke"] = "鸡肋：你可以获得一张指定类别的牌，令 %dest 不能使用、打出、弃置该类别牌直到其下回合开始",
+  ["#joy__jilei-draw"] = "鸡肋：你可以获得一张指定类别的牌",
+  ["@joy__jilei"] = "鸡肋",
+}
+
+local liuxie = General(extension, "joy__liuxie", "qun", 3)
+local tianming = fk.CreateTriggerSkill{
+  name = "joy__tianming",
+  anim_type = "defensive",
+  events = {fk.TargetConfirmed},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and data.card.trueName == "slash"
+  end,
+  on_cost = function(self, event, target, player, data)
+    local ids = table.filter(player:getCardIds("he"), function(id) return not player:prohibitDiscard(Fk:getCardById(id)) end)
+    if #ids < 3 then
+      if player.room:askForSkillInvoke(player, self.name, data, "#tianming-cost") then
+        self.cost_data = ids
+        return true
+      end
+    else
+      local cards = player.room:askForDiscard(player, 2, 2, true, self.name, true, ".", "#tianming-cost", true)
+      if #cards > 0 then
+        self.cost_data = cards
+        return true
+      end
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:throwCard(self.cost_data, self.name, player, player)
+    if not player.dead then
+      player:drawCards(2, self.name)
+    end
+    if player.dead then return end
+    local tos = room:askForChoosePlayers(player,table.map(room.alive_players, Util.IdMapper),1,1,"#joy__tianming-choose",self.name,true)
+    if #tos > 0 then
+      local to = room:getPlayerById(tos[1])
+      room:askForDiscard(to, 2, 2, true, self.name, false)
+      if not to.dead then
+        to:drawCards(2, self.name)
+      end
+    end
+  end,
+}
+local mizhao = fk.CreateActiveSkill{
+  name = "joy__mizhao",
+  anim_type = "control",
+  min_card_num = 1,
+  target_num = 1,
+  can_use = function(self, player)
+    return player:usedSkillTimes(self.name, Player.HistoryPhase) == 0
+  end,
+  card_filter = function(self, to_select, selected)
+    return table.contains(Self.player_cards[Player.Hand], to_select)
+  end,
+  target_filter = function(self, to_select, selected, cards)
+    return #selected == 0 and to_select ~= Self.id and #cards > 0
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local to = room:getPlayerById(effect.tos[1])
+    local cards = effect.cards
+    room:moveCardTo(effect.cards, Player.Hand, to, fk.ReasonGive, self.name, nil, false, player.id)
+    if player.dead or to.dead then return end
+    local targets = table.filter(room.alive_players, function(p)
+      return to:canPindian(p)
+    end)
+    if #targets == 0 then return end
+    local tos = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#mizhao-choose::"..to.id, self.name, false)
+    local victim = room:getPlayerById(tos[1])
+    local pindian = to:pindian({victim}, self.name)
+    local winner = pindian.results[victim.id].winner
+    if winner then
+      local loser = (winner == to) and victim or to
+      if loser.dead then return end
+      room:useVirtualCard("slash", nil, winner, {loser}, self.name)
+    end
+  end
+}
+liuxie:addSkill(tianming)
+liuxie:addSkill(mizhao)
+Fk:loadTranslationTable{
+  ["joy__liuxie"] = "刘协",
+  ["#joy__liuxie"] = "受困天子",
+
+  ["joy__tianming"] = "天命",
+  [":joy__tianming"] = "当你成为【杀】的目标后，你可以弃置两张牌（不足则全弃，无牌则不弃），然后摸两张牌；然后你可以令一名角色也如此做，",
+  ["joy__mizhao"] = "密诏",
+  [":joy__mizhao"] = "出牌阶段限一次，你可以将至少一张手牌交给一名其他角色。若如此做，你令该角色与你指定的另一名有手牌的角色拼点，"..
+  "视为拼点赢的角色对没赢的角色使用一张【杀】。",
+  ["#joy__tianming-choose"] = "天命:可以令一名角色弃置两张牌，然后摸两张牌",
+}
+
 
 return extension

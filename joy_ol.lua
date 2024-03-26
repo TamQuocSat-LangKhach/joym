@@ -243,7 +243,7 @@ local fujian = fk.CreateTriggerSkill {
     local targets = table.filter(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
     local to = table.random(targets)
     room:doIndicate(player.id, {to.id})
-    U.viewCards(player, table.random(to.player_cards[Player.Hand], 1), self.name)
+    U.viewCards(player, table.random(to.player_cards[Player.Hand], 1), self.name, "$ViewCardsFrom:"..to.id)
   end,
 }
 lingren:addRelatedSkill(lingren_delay)
