@@ -189,35 +189,10 @@ local joy__juyi = fk.CreateTriggerSkill{
     player.room:handleAddLoseSkills(player, "joy__benghuai|ty_ex__weizhong")
   end,
 }
-local joy__benghuai = fk.CreateTriggerSkill{
-  name = "joy__benghuai",
-  anim_type = "negative",
-  frequency = Skill.Compulsory,
-  events = {fk.EventPhaseStart},
-  can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self) and player.phase == Player.Finish then
-      return table.find(player.room.alive_players, function (p)
-        return p.hp < player.hp
-      end)
-    end
-  end,
-  on_use = function(self, event, target, player, data)
-    local room = player.room
-    local choice = room:askForChoice(player, {"loseMaxHp", "loseHp"}, self.name)
-    if choice == "loseMaxHp" then
-      room:changeMaxHp(player, -1)
-    else
-      room:loseHp(player, 1, self.name)
-    end
-    if not player.dead then
-      player:drawCards(1, self.name)
-    end
-  end,
-}
 joy__zhugedan:addSkill(joy__gongao)
 joy__zhugedan:addSkill(joy__juyi)
-joy__zhugedan:addRelatedSkill(joy__benghuai)
 joy__zhugedan:addRelatedSkill("ty_ex__weizhong")
+joy__zhugedan:addRelatedSkill("joy__benghuai")
 Fk:loadTranslationTable{
   ["joy__zhugedan"] = "诸葛诞",
   ["#joy__zhugedan"] = "薤露蒿里",
@@ -225,9 +200,6 @@ Fk:loadTranslationTable{
   [":joy__gongao"] = "锁定技，每当一名其他角色进入濒死状态时，你增加1点体力上限，然后回复1点体力。",
   ["joy__juyi"] = "举义",
   [":joy__juyi"] = "限定技，准备阶段，若你体力上限大于全场角色数，你可以将手牌摸至体力上限，然后获得技能〖崩坏〗和〖威重〗。",
-  -- 可以不发动的觉醒技 村成限定技
-  ["joy__benghuai"] = "崩坏",
-  [":joy__benghuai"] = "锁定技，结束阶段，若你不是体力值最低的角色，则你失去1点体力或减少1点体力上限，并摸一张牌。",
 }
 
 local joy__guanyinping = General(extension, "joy__guanyinping", "shu", 3, 3, General.Female)
