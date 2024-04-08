@@ -1941,30 +1941,7 @@ local shelie = fk.CreateTriggerSkill{
     return target == player and player:hasSkill(self) and player.phase == Player.Draw
   end,
   on_use = function(self, event, target, player, data)
-    local room = player.room
-    local cards = room:getNCards(5)
-    room:moveCards({
-      ids = cards,
-      toArea = Card.Processing,
-      moveReason = fk.ReasonPut,
-    })
-    local get = room:askForPoxi(player, "shelie", {
-      { self.name, cards },
-    }, nil, false)
-    if #get > 0 then
-      local dummy = Fk:cloneCard("dilu")
-      dummy:addSubcards(get)
-      room:obtainCard(player, dummy, true, fk.ReasonPrey)
-    end
-    cards = table.filter(cards, function(id) return room:getCardArea(id) == Card.Processing end)
-    if #cards > 0 then
-      room:moveCards({
-        ids = cards,
-        toArea = Card.DiscardPile,
-        moveReason = fk.ReasonPutIntoDiscardPile,
-      })
-    end
-    return true
+    return Fk.skills["shelie"]:use(event, target, player, data)
   end,
 }
 local gongxin = fk.CreateTriggerSkill{

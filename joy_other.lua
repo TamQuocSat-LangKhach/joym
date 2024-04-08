@@ -694,6 +694,72 @@ Fk:loadTranslationTable{
   ["~joy__xiaoshan"] = "时间已到，闪人咯！",
 }
 
+--[[
+local joy__dalanmao = General(extension, "joy__dalanmao", "god", 4)
 
+local joy__zuzhou = fk.CreateTriggerSkill{
+  name = "joy__zuzhou",
+  events = {fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and not target.dead and target.hp > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#joy__zuzhou-invoke:"..target.id)
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:loseHp(player, 1, self.name)
+    local choice = room:askForChoice(player, {"joy__zuzhou_slash2jink","joy__zuzhou_jink2slash"}, self.name)
+    room:setPlayerMark(target, "@joy__zuzhou-turn", choice)
+    target:filterHandcards()
+  end,
+}
+local joy__zuzhou_filter = fk.CreateFilterSkill{
+  name = "#joy__zuzhou_filter",
+  card_filter = function(self, card, player)
+    local mark = player:getMark("@joy__zuzhou-turn")
+    if mark ~= 0 then
+      if mark == "joy__zuzhou_slash2jink" then
+        return table.contains(player.player_cards[Player.Hand], card.id) and card.trueName == "slash"
+      else
+        return table.contains(player.player_cards[Player.Hand], card.id) and card.trueName == "jink"
+      end
+    end
+  end,
+  view_as = function(self, card)
+    if card.trueName == "slash" then
+      return Fk:cloneCard("jink", card.suit, card.number)
+    else
+      return Fk:cloneCard("slash", card.suit, card.number)
+    end
+  end,
+}
+joy__zuzhou:addRelatedSkill(joy__zuzhou_filter)
+joy__dalanmao:addSkill(joy__zuzhou)
+
+
+Fk:loadTranslationTable{
+  ["joy__dalanmao"] = "大懒猫",
+
+  ["joy__zuzhou"] = "诅咒",
+  [":joy__zuzhou"] = "一名角色的回合开始时，你可以失去1点体力并选择一项：1.令其手牌中的所有【杀】视为【闪】直到其回合结束；2.令其手牌中的所有【闪】视为【杀】直到其回合结束。",
+  ["#joy__zuzhou-invoke"] = "诅咒:你可以令 %src 本回合【杀】视为【闪】，或【闪】视为【杀】",
+  ["joy__zuzhou_slash2jink"] = "杀视为闪",
+  ["joy__zuzhou_jink2slash"] = "闪视为杀",
+  ["@joy__zuzhou-turn"] = "诅咒",
+  ["#joy__zuzhou_filter"] = "诅咒",
+
+  ["joy__moyu"] = "摸鱼",
+  [":joy__moyu"] = "出牌阶段开始时，你可以令你本回合手牌上限+2，下个回合摸牌阶段摸牌数+2；若如此做，则你本回合使用牌不能指定其他角色为目标，且回合结束时回复1点体力。",
+
+  ["joy__sanlian"] = "三连",
+  [":joy__sanlian"] = "出牌阶段，你可以弃置三张类型相同的手牌并摸X张牌（X为你已损失的体力值），然后对所有角色造成1点伤害，若你弃置的牌的牌名相同，则你弃置所有其他角色各一张牌。",
+
+  ["$joy__zuzhou1"] = "嗯喵！喵！！",
+  ["$joy__moyu1"] = "呜呜呜~喵~",
+  ["$joy__sanlian1"] = "喵！喵！！喵！！！",
+  ["~joy__dalanmao"] = "喵……",
+}
+--]]
 
 return extension
