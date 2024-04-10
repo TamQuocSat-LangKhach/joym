@@ -694,7 +694,7 @@ Fk:loadTranslationTable{
   ["~joy__xiaoshan"] = "时间已到，闪人咯！",
 }
 
---[[
+
 local joy__dalanmao = General(extension, "joy__dalanmao", "god", 4)
 
 local joy__zuzhou = fk.CreateTriggerSkill{
@@ -738,6 +738,110 @@ joy__zuzhou:addRelatedSkill(joy__zuzhou_filter)
 joy__dalanmao:addSkill(joy__zuzhou)
 
 
+local joy__moyu = fk.CreateTriggerSkill{
+  name = "joy__moyu",
+  events = {fk.EventPhaseStart},
+  anim_type = "defensive",
+  can_trigger = function(self, event, target, player, data)
+    return player:hasSkill(self) and target == player and player.phase == Player.Play
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#joy__moyu-invoke")
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, 2)
+    room:addPlayerMark(player, "joy__moyu_draw")
+    room:addPlayerMark(player, "@@joy__moyu-turn")
+    room:broadcastProperty(player, "MaxCards")
+  end,
+}
+
+local joy__moyu_delay = fk.CreateTriggerSkill{
+  name = "#joy__moyu_delay",
+  mute = true,
+  events = {fk.TurnEnd, fk.DrawNCards},
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.TurnEnd then
+      return target == player and player:isWounded() and player:getMark("@@joy__moyu-turn") > 0
+    else
+      return target == player and player:getMark("joy__moyu_draw-turn") > 0
+    end
+  end,
+  on_cost = Util.TrueFunc,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.TurnEnd then
+      room:recover { num = math.min(player.maxHp-player.hp,player:getMark("@@joy__moyu-turn")), skillName = "joy__moyu", who = player, recoverBy = player }
+    else
+      data.n = data.n + 2 * player:getMark("joy__moyu_draw-turn")
+    end
+  end,
+
+  refresh_events = {fk.TurnStart},
+  can_refresh = function (self, event, target, player, data)
+    return target == player and player:getMark("joy__moyu_draw") > 0
+  end,
+  on_refresh = function (self, event, target, player, data)
+    player.room:setPlayerMark(player, "joy__moyu_draw-turn", player:getMark("joy__moyu_draw"))
+    player.room:setPlayerMark(player, "joy__moyu_draw", 0)
+  end,
+}
+joy__moyu:addRelatedSkill(joy__moyu_delay)
+
+local joy__moyu_prohibit = fk.CreateProhibitSkill{
+  name = "#joy__moyu_prohibit",
+  is_prohibited = function(self, from, to, card)
+    return from:getMark("@@joy__moyu-turn") > 0 and from ~= to
+  end,
+}
+joy__moyu:addRelatedSkill(joy__moyu_prohibit)
+
+joy__dalanmao:addSkill(joy__moyu)
+
+local joy__sanlian = fk.CreateActiveSkill{
+  name = "joy__sanlian",
+  anim_type = "drawcard",
+  card_num = 3,
+  target_num = 0,
+  card_filter = function(self, to_select, selected)
+    return #selected < 3
+    and table.contains(Self.player_cards[Player.Hand], to_select)
+    and not Self:prohibitDiscard(Fk:getCardById(to_select))
+    and table.every(selected, function (id)
+      return Fk:getCardById(id).type == Fk:getCardById(to_select).type
+    end)
+  end,
+  can_use = function(self, player)
+    return player:getHandcardNum() > 2
+  end,
+  on_use = function(self, room, effect)
+    local player = room:getPlayerById(effect.from)
+    local same = table.every(effect.cards, function (id)
+      return Fk:getCardById(id).trueName == Fk:getCardById(effect.cards[1]).trueName
+    end)
+    room:throwCard(effect.cards, self.name, player, player)
+    if not player.dead then
+      player:drawCards(player:getLostHp(), self.name)
+    end
+    for _, p in ipairs(room:getAlivePlayers()) do
+      if not p.dead then
+        room:damage { from = player, to = p, damage = 1, skillName = self.name }
+      end
+    end
+    if not player.dead and same then
+      for _, p in ipairs(room:getOtherPlayers(player)) do
+        if player.dead then break end
+        if not p:isNude() then
+          local id = room:askForCardChosen(player, p, "he", self.name)
+          room:throwCard({id}, self.name, p, player)
+        end
+      end
+    end
+  end,
+}
+joy__dalanmao:addSkill(joy__sanlian)
+
 Fk:loadTranslationTable{
   ["joy__dalanmao"] = "大懒猫",
 
@@ -751,15 +855,19 @@ Fk:loadTranslationTable{
 
   ["joy__moyu"] = "摸鱼",
   [":joy__moyu"] = "出牌阶段开始时，你可以令你本回合手牌上限+2，下个回合摸牌阶段摸牌数+2；若如此做，则你本回合使用牌不能指定其他角色为目标，且回合结束时回复1点体力。",
+  ["#joy__moyu-invoke"] = "摸鱼:可以令本回合手牌上限+2，下个回合摸牌数+2，本回合不能指定其他角色为目标，回合结束时回复1点体力",
+  ["#joy__moyu_delay"] = "摸鱼",
+  ["@@joy__moyu-turn"] = "摸鱼",
 
   ["joy__sanlian"] = "三连",
   [":joy__sanlian"] = "出牌阶段，你可以弃置三张类型相同的手牌并摸X张牌（X为你已损失的体力值），然后对所有角色造成1点伤害，若你弃置的牌的牌名相同，则你弃置所有其他角色各一张牌。",
+  ["#joy__sanlian-prompt"] = "三连：弃置三张类型相同的手牌并摸已损失的体力值张牌，对所有角色造成1点伤害",
 
   ["$joy__zuzhou1"] = "嗯喵！喵！！",
   ["$joy__moyu1"] = "呜呜呜~喵~",
   ["$joy__sanlian1"] = "喵！喵！！喵！！！",
   ["~joy__dalanmao"] = "喵……",
 }
---]]
+
 
 return extension
