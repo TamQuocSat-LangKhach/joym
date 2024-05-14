@@ -712,6 +712,124 @@ Fk:loadTranslationTable{
   ["#joy__jijiang-ask"] =  "激将：你可代替 %src 打出一张杀，然后其与你各摸一张牌"
 }
 
+local sunjian = General(extension, "joyex__sunjian", "wu", 4)
+local joyex__yinghun = fk.CreateTriggerSkill{
+  name = "joyex__yinghun",
+  anim_type = "control",
+  events = {fk.EventPhaseStart},
+  can_trigger = function(self, event, target, player, data)
+    return  target == player and player:hasSkill(self) and player.phase == Player.Start
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local n = player:getLostHp()
+    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), Util.IdMapper),
+    1,1,"#joyex__yinghun-choose:::"..n, self.name, true)
+    if #tos > 0 then
+      local choices =  {"joyex__yinghundraw:::"..n,"joyex__yinghundis:::"..n}
+      if n == 0 then
+        table.remove(choices, 1)
+      end
+      local choice = room:askForChoice(player, choices, self.name)
+      self.cost_data = {tos[1], choice}
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local to = room:getPlayerById(self.cost_data[1])
+    local n = player:getLostHp()
+    if self.cost_data[2]:startsWith("joyex__yinghundraw") then
+      to:drawCards(n, self.name)
+    else
+      to:drawCards(1, self.name)
+      if n > 0 and not target:isNude() then
+        room:askForDiscard(to, n, n, true, self.name, false)
+      end
+    end
+  end,
+}
+sunjian:addSkill(joyex__yinghun)
+local wulie = fk.CreateTriggerSkill{
+  name = "joyex__wulie",
+  anim_type = "offensive",
+  frequency = Skill.Limited,
+  events = {fk.TurnStart},
+  can_trigger = function(self, event, target, player, data)
+    return  target == player and player:hasSkill(self) and player:usedSkillTimes(self.name, Player.HistoryGame) == 0 and player.hp > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    local room = player.room
+    local _, ret = room:askForUseActiveSkill(player, "joyex__wulie_active", "#joyex__wulie-invoke", true)
+    if ret then
+      self.cost_data = ret.interaction
+      return true
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    local n = self.cost_data
+    room:loseHp(player,n,self.name)
+    if not player.dead then
+      room:addPlayerMark(player,"@joyex__lie",n)
+      local targets = room:askForChoosePlayers(player,table.map(room:getOtherPlayers(player), Util.IdMapper), 1, n,
+      "#joyex__wulie-choose:::"..n,self.name,true)
+      if #targets > 0 then
+        for _, pid in ipairs(targets) do
+          room:addPlayerMark(room:getPlayerById(pid), "@joyex__lie")
+        end
+      end
+    end
+  end,
+}
+local wulie_buff = fk.CreateTriggerSkill{
+  name = "#joyex__wulie_buff",
+  anim_type = "offensive",
+  events = {fk.DamageInflicted},
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:getMark("@joyex__lie") > 0
+  end,
+  on_cost = function(self, event, target, player, data)
+    return player.room:askForSkillInvoke(player, self.name, nil, "#joyex__wulie-defend")
+  end,
+  on_use = function(self, event, target, player, data)
+    player.room:removePlayerMark(player, "@joyex__lie")
+    return true
+  end,
+}
+local wulie_active = fk.CreateActiveSkill{
+  name = "joyex__wulie_active",
+  anim_type = "offensive",
+  card_num = 0,
+  target_num = 0,
+  frequency = Skill.Limited,
+  card_filter = Util.FalseFunc,
+  interaction = function()
+    return UI.Spin { from = 1, to = Self.hp }
+  end,
+}
+Fk:addSkill(wulie_active)
+wulie:addRelatedSkill(wulie_buff)
+sunjian:addSkill(wulie)
+Fk:loadTranslationTable{
+  ["joyex__sunjian"] = "界孙坚",
+
+  ["joyex__yinghun"] = "英魂",
+  [":joyex__yinghun"] = "准备阶段，你可以选择一名其他角色并选择一项：1.令其摸X张牌；2.令其摸一张牌，然后弃置X张牌。（X为你已损失的体力值）",
+  ["joyex__yinghundraw"] = "其摸%arg张牌",
+  ["joyex__yinghundis"] = "其摸1张牌并弃%arg张牌",
+  ["#joyex__yinghun-choose"] = "英魂：你可以令一名其他角色摸%arg张牌；或令其摸1张牌并弃%arg张牌",
+
+  ["joyex__wulie"] = "武烈",
+  [":joyex__wulie"] = "限定技，你的回合开始时，你可以失去任意点体力获得等量枚“烈”标记，然后令至多等量名其他角色各获得一枚“烈”标记。当有“烈”的角色受到伤害时，其可以弃置一枚“烈”标记来防止该伤害。",
+  ["@joyex__lie"] = "烈",
+  ["#joyex__wulie-choose"] = "武烈：你可以令至多 %arg 名其他角色各获得一枚“烈”",
+  ["#joyex__wulie_buff"] = "武烈",
+  ["#joyex__wulie-defend"] = "武烈：你可以弃一枚“烈”来防止你受到的伤害",
+  ["joyex__wulie_active"] = "武烈",
+  [ "#joyex__wulie-invoke"] = "武烈：你可以失去任意点体力获得等量枚“烈”标记",
+}
+
 local sunce = General(extension, "joyex__sunce", "wu", 4)
 local jiang = fk.CreateTriggerSkill{
   name = "joyex__jiang",
@@ -751,24 +869,22 @@ local yinghun = fk.CreateTriggerSkill{
     return target == player and player:hasSkill(self) and player.phase == Player.Start
   end,
   on_cost = function(self, event, target, player, data)
-    local to
-    if player:getLostHp() > 0 then
-      to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__yinghun-discard:::"..player:getLostHp(), self.name, true)
-    else
-      to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__yinghun-drawcard", self.name, true)
+    local prompt = "#joy__yinghun-drawcard"
+    if player:isWounded() then
+      prompt = "#joy__yinghun-discard:::"..player:getLostHp()
     end
-    if #to > 0 then
-      self.cost_data = to[1]
+    local tos = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, prompt, self.name, true)
+    if #tos > 0 then
+      self.cost_data = tos[1]
       return true
     end
   end,
   on_use = function (self,event,target,player,data)
-    local p = player.room:getPlayerById(self.cost_data)
-    if not p.dead then
-      player.room:drawCards(p,1,self.name)
-    end
-    if not p.dead and player:getLostHp() > 0 then
-      player.room:askForDiscard(p,player:getLostHp(),player:getLostHp())
+    local to = player.room:getPlayerById(self.cost_data)
+    local x = player:getLostHp()
+    to:drawCards(1, self.name)
+    if not to:isNude() and x > 0 then
+      player.room:askForDiscard(to, x, x, true, self.name, false)
     end
   end
 }
@@ -852,8 +968,8 @@ Fk:loadTranslationTable{
   ["joy__yinghun"] = "英魂",
   [":joy__yinghun"] = "准备阶段，你可以令一名其他角色摸一张牌，然后弃X张牌（X为你已损失的体力值）",
 
-  ["#joy__yinghun-drawcard"] = "英魂:你可以选择一名其他角色摸一张牌。",
-  ["#joy__yinghun-discard"] = "英魂：你可以选择一名其他角色摸一张牌，然后弃%arg张牌",
+  ["#joy__yinghun-drawcard"] = "英魂:你可以令一名其他角色摸一张牌。",
+  ["#joy__yinghun-discard"] = "英魂：你可以令一名其他角色摸一张牌，然后弃%arg张牌",
   ["$ex__yingzi_joyex__sunce1"] = "公瑾，助我决一死战！",
   ["$ex__yingzi_joyex__sunce2"] = "尔等看好了！",
 }
