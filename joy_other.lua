@@ -24,7 +24,7 @@ local joy__shixian = fk.CreateTriggerSkill{
     local names = {"joy__xiakexing", "joy__qiangjinjiu", "joy__jingyesi", "joy__xinglunan"}
     room:handleAddLoseSkills(player, "-"..table.concat(names, "|-"))
     local cards = room:getNCards(4)
-    room:moveCardTo(cards, Card.Processing, nil, fk.ReasonPut, self.name)
+    room:moveCardTo(cards, Card.Processing, nil, fk.ReasonPut, self.name, "", true, player.id)
     room:delay(1000)
     local map = {}
     for _, id in ipairs(cards) do
@@ -42,7 +42,7 @@ local joy__shixian = fk.CreateTriggerSkill{
     if #get > 0 and not player.dead then
       room:moveCardTo(get, Card.PlayerHand, player, fk.ReasonPrey, self.name)
     end
-    cards = table.filter(cards, function(id) return Fk:getCardById(id) == Card.Processing end)
+    cards = table.filter(cards, function(id) return room:getCardArea(id) == Card.Processing end)
     if #cards > 0 then
       room:moveCards({
         ids = cards,
