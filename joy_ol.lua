@@ -409,6 +409,87 @@ Fk:loadTranslationTable{
   ["#joy__luanfeng-invoke"] = "鸾凤：你可令 %src 将体力回复至3点，手牌补至六张",
 }
 
+local quyi = General(extension, "joy__quyi", "qun", 4)
+local fuji = fk.CreateTriggerSkill{
+  name = "joy__fuji",
+  anim_type = "offensive",
+  events = {fk.CardUsing, fk.Damage},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    if event == fk.CardUsing then
+      return target == player and player:hasSkill(self) and not player:isRemoved() and
+      (data.card.trueName == "slash" or data.card:isCommonTrick()) and
+      table.find(player.room:getOtherPlayers(player), function(p) return not p:isRemoved() and p:distanceTo(player) < 3 end)
+    else
+      return target == player and player:hasSkill(self) and data.to ~= player and not data.to.dead
+      and not table.contains(U.getMark(player, "joy__fuji_record"), data.to.id)
+    end
+  end,
+  on_use = function(self, event, target, player, data)
+    local room = player.room
+    if event == fk.CardUsing then
+      data.disresponsiveList = data.disresponsiveList or {}
+      for _, p in ipairs(room:getOtherPlayers(player)) do
+        if not p:isRemoved() and p:distanceTo(player) < 3 then
+          table.insertIfNeed(data.disresponsiveList, p.id)
+        end
+      end
+    else
+      room:addPlayerMark(data.to, "@@joyfuji")
+      room:addPlayerMark(data.to, MarkEnum.UncompulsoryInvalidity)
+      local mark = U.getMark(player, "joy__fuji_record")
+      table.insert(mark, data.to.id)
+      room:setPlayerMark(player, "joy__fuji_record", mark)
+    end
+  end,
+
+  refresh_events = {fk.TurnStart, fk.BuryVictim},
+  can_refresh = function(self, event, target, player, data)
+    if player:getMark("joy__fuji_record") == 0 then return end
+    if event == fk.BuryVictim then
+      return target == player
+    else
+      return target ~= player
+    end
+  end,
+  on_refresh = function(self, event, target, player, data)
+    local room = player.room
+    for _, pid in ipairs(U.getMark(player, "joy__fuji_record")) do
+      local p = room:getPlayerById(pid)
+      room:removePlayerMark(p, "@@joyfuji")
+      room:removePlayerMark(p,MarkEnum.UncompulsoryInvalidity)
+    end
+    room:setPlayerMark(player, "joy__fuji_record", 0)
+  end,
+}
+local jiaozi = fk.CreateTriggerSkill{
+  name = "joy__jiaozi",
+  anim_type = "offensive",
+  events = {fk.DamageCaused},
+  frequency = Skill.Compulsory,
+  can_trigger = function(self, event, target, player, data)
+    return target == player and player:hasSkill(self) and
+      table.every(player.room:getOtherPlayers(player), function(p)
+        return player:getHandcardNum() >= p:getHandcardNum() end)
+  end,
+  on_use = function(self, event, target, player, data)
+    data.damage = data.damage + 1
+  end,
+}
+quyi:addSkill(fuji)
+quyi:addSkill(jiaozi)
+Fk:loadTranslationTable{
+  ["joy__quyi"] = "麴义",
+  ["#joy__quyi"] = "名门的骁将",
+
+  ["joy__fuji"] = "伏骑",
+  ["#joy__fuji_mark"] = "伏骑",
+  [":joy__fuji"] = "锁定技，当你使用【杀】或普通锦囊牌时，你令至你距离为2以内的其他角色不能响应此牌。"..
+  "每当你对其他角色造成伤害后，令其非锁定技失效，直到任意其他角色的回合开始。",
+  ["joy__jiaozi"] = "骄恣",
+  [":joy__jiaozi"] = "锁定技，当你造成伤害时，若你的手牌为全场最多，则此伤害+1。",
+  ["@@joyfuji"] = "伏骑",
+}
 
 
 return extension
