@@ -290,7 +290,7 @@ local joy__xiefang = fk.CreateDistanceSkill{
     if from:hasSkill(self) then
       local n = 0
       for _, p in ipairs(Fk:currentRoom().alive_players) do
-        if p.gender == General.Female then
+        if p:isFemale() then
           n = n + 1
         end
       end
@@ -306,7 +306,7 @@ local joy__xiefang_maxcards = fk.CreateMaxCardsSkill{
     if player:hasSkill(self) then
       local n = 0
       for _, p in ipairs(Fk:currentRoom().alive_players) do
-        if p.gender == General.Female then
+        if p:isFemale() then
           n = n + 1
         end
       end
@@ -911,7 +911,7 @@ local pingjian_skills = {
 }
 
 local getPingjianSkills = function (player, event)
-  local used_skills = U.getMark(player, "joy__pingjian_used")
+  local used_skills = player:getTableMark("joy__pingjian_used")
   local e = event and event or "play"
   return table.filter(pingjian_skills[e], function (skill_name)
     local sk = Fk.skills[skill_name]
@@ -925,10 +925,10 @@ local addTYPingjianSkill = function(player, skill_name)
   local skill = Fk.skills[skill_name]
   if skill == nil or player:hasSkill(skill_name, true) then return false end
   room:handleAddLoseSkills(player, skill_name, nil)
-  local skills = U.getMark(player, "joy__pingjian_skills")
+  local skills = player:getTableMark("joy__pingjian_skills")
   table.insertIfNeed(skills, skill_name)
   room:setPlayerMark(player, "joy__pingjian_skills", skills)
-  local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+  local pingjian_skill_times = player:getTableMark("joy__pingjian_skill_times")
   table.insert(pingjian_skill_times, {skill_name, player:usedSkillTimes(skill_name)})
   for _, s in ipairs(skill.related_skills) do
     table.insert(pingjian_skill_times, {s.name, player:usedSkillTimes(s.name)})
@@ -942,11 +942,11 @@ local removeTYPingjianSkill = function(player, skill_name)
   local skill = Fk.skills[skill_name]
   if skill == nil then return false end
   room:handleAddLoseSkills(player, "-" .. skill_name, nil)
-  local skills = U.getMark(player, "joy__pingjian_skills")
+  local skills = player:getTableMark("joy__pingjian_skills")
   table.removeOne(skills, skill_name)
   room:setPlayerMark(player, "joy__pingjian_skills", skills)
   local invoked = false
-  local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+  local pingjian_skill_times = player:getTableMark("joy__pingjian_skill_times")
   local record_copy = {}
   for _, pingjian_record in ipairs(pingjian_skill_times) do
     if #pingjian_record == 2 then
@@ -964,7 +964,7 @@ local removeTYPingjianSkill = function(player, skill_name)
   room:setPlayerMark(player, "joy__pingjian_skill_times", record_copy)
 
   if invoked then
-    local used_skills = U.getMark(player, "joy__pingjian_used")
+    local used_skills = player:getTableMark("joy__pingjian_used")
     table.insertIfNeed(used_skills, skill_name)
     room:setPlayerMark(player, "joy__pingjian_used", used_skills)
   end
@@ -1044,7 +1044,7 @@ local joy__pingjian_trigger = fk.CreateTriggerSkill{
 local joy__pingjian_invalidity = fk.CreateInvaliditySkill {
   name = "#joy__pingjian_invalidity",
   invalidity_func = function(self, player, skill)
-    local pingjian_skill_times = U.getMark(player, "joy__pingjian_skill_times")
+    local pingjian_skill_times = player:getTableMark("joy__pingjian_skill_times")
     return table.find(pingjian_skill_times, function (pingjian_record)
       if #pingjian_record == 2 then
         local skill_name = pingjian_record[1]

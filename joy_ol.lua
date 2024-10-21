@@ -281,7 +281,7 @@ local joy__youlong = fk.CreateViewAsSkill{
   end,
   interaction = function()
     local names = {}
-    local mark = U.getMark(Self, "@$joy__youlong")
+    local mark = Self:getTableMark("@$joy__youlong")
     local isYang = Self:getSwitchSkillState("joy__youlong") == fk.SwitchYang
     for _, id in ipairs(Fk:getAllCardIds()) do
       local card = Fk:getCardById(id)
@@ -314,7 +314,7 @@ local joy__youlong = fk.CreateViewAsSkill{
   end,
   before_use = function(self, player, use)
     local room = player.room
-    local mark = U.getMark(player, "@$joy__youlong")
+    local mark = player:getTableMark("@$joy__youlong")
     table.insert(mark, use.card.trueName)
     room:setPlayerMark(player, "@$joy__youlong", mark)
     local state = player:getSwitchSkillState(self.name, true, true)

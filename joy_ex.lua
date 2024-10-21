@@ -517,7 +517,7 @@ local joyex__jizhi = fk.CreateTriggerSkill{
       room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, 1)
     elseif card.type == Card.TypeEquip and room:getCardOwner(card) == player and room:getCardArea(card) == Player.Hand then
       local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
-        return p:hasEmptyEquipSlot(card.sub_type) end), function(p) return p.id end)
+        return p:hasEmptyEquipSlot(card.sub_type) end), Util.IdMapper)
       if #targets == 0 then return end
       local to = room:askForChoosePlayers(player, targets, 1, 1, "#joyex__jizhi-choose:::"..card:toLogString(), self.name, true)
       if #to > 0 then
@@ -873,7 +873,7 @@ local qingnang = fk.CreateActiveSkill{
     end
     local tos = effect.tos
     room:sortPlayersByAction(tos)
-    local mark = U.getMark(player, "joyex__qingnang_record")
+    local mark = player:getTableMark("joyex__qingnang_record")
     for _, pid in ipairs(tos) do
       local p = room:getPlayerById(pid)
       if not p.dead then
@@ -892,7 +892,7 @@ local qingnang_trigger = fk.CreateTriggerSkill{
   mute = true,
   events = {fk.TurnStart},
   can_trigger = function(self, event, target, player, data)
-    return target == player and #U.getMark(player, "joyex__qingnang_record") > 0
+    return target == player and #player:getTableMark("joyex__qingnang_record") > 0
   end,
   on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)

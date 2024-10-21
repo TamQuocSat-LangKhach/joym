@@ -405,7 +405,7 @@ local joy__lianshi = fk.CreateTriggerSkill{
   events = { fk.AfterCardsMove },
   can_trigger = function(self, event, target, player, data)
     if player:hasSkill(self) then
-      local mark = U.getMark(player, "@joy__lianshi")
+      local mark = player:getTableMark("@joy__lianshi")
       local suits, num = {}, 0
       for _, move in ipairs(data) do
         if move.from == player.id and (move.moveReason == fk.ReasonUse or move.moveReason == fk.ReasonResonpse or move.moveReason == fk.ReasonDiscard) then
@@ -427,7 +427,7 @@ local joy__lianshi = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     local suits, num = table.unpack(self.cost_data)
-    local mark = U.getMark(player, "@joy__lianshi")
+    local mark = player:getTableMark("@joy__lianshi")
     table.insertTable(mark, suits)
     room:setPlayerMark(player, "@joy__lianshi", mark)
     if #mark == 4 then

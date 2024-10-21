@@ -182,13 +182,13 @@ local joyex__qiangxi = fk.CreateActiveSkill{
   card_filter = Util.FalseFunc,
   target_filter = function(self, to_select, selected)
     if #selected == 0 and Self:inMyAttackRange(Fk:currentRoom():getPlayerById(to_select)) then
-      return not table.contains(U.getMark(Self, "joyex__qiangxi_targets-phase"), to_select)
+      return not table.contains(Self:getTableMark("joyex__qiangxi_targets-phase"), to_select)
     end
   end,
   on_use = function(self, room, effect)
     local player = room:getPlayerById(effect.from)
     local target = room:getPlayerById(effect.tos[1])
-    local mark = U.getMark(player, "joyex__qiangxi_targets-phase")
+    local mark = player:getTableMark("joyex__qiangxi_targets-phase")
     table.insertIfNeed(mark, target.id)
     room:setPlayerMark(player, "joyex__qiangxi_targets-phase", mark)
     room:loseHp(player, 1, self.name)

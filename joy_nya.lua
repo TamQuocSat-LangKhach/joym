@@ -330,7 +330,7 @@ local nya__xianzhou = fk.CreateActiveSkill{
     room:obtainCard(target, dummy, false, fk.ReasonGive)
     if target.dead then return end
     local targets = table.map(table.filter(room:getOtherPlayers(target), function(p)
-      return target:inMyAttackRange(p) end), function(p) return p.id end)
+      return target:inMyAttackRange(p) end), Util.IdMapper)
     if #targets > 0 then
       local tos = room:askForChoosePlayers(target, targets, 1, n, "#xianzhou-choose:"..player.id.."::"..n, self.name, true)
       if #tos > 0 then
@@ -578,7 +578,7 @@ local nya__lieren = fk.CreateTriggerSkill{
       end
     else
       local to = room:askForChoosePlayers(player, table.map(table.filter(room:getOtherPlayers(player), function(p)
-        return not p:isKongcheng() end), function(p) return p.id end),
+        return not p:isKongcheng() end), Util.IdMapper),
         1, 1, "#nya__lieren-choose", self.name, true)
       if #to > 0 then
         self.cost_data = to[1]
@@ -1034,7 +1034,7 @@ local nya__xiaoji = fk.CreateTriggerSkill{
     player:drawCards(2, self.name)
     if not player.dead and not player:hasSkill("nya__play", true) then
       local targets = table.map(table.filter(room.alive_players, function(p)
-        return #p:getCardIds("ej") > 0 end), function(p) return p.id end)
+        return #p:getCardIds("ej") > 0 end), Util.IdMapper)
       if #targets == 0 then return end
       local to = room:askForChoosePlayers(player, targets, 1, 1, "#nya__xiaoji-choose", self.name)
       if #to > 0 then

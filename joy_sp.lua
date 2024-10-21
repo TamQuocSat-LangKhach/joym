@@ -221,7 +221,7 @@ local joy__huxiao = fk.CreateTriggerSkill{
 local joy__huxiao_targetmod = fk.CreateTargetModSkill{
   name = "#joy__huxiao_targetmod",
   bypass_times = function(self, player, skill, scope, card, to)
-    return table.contains(U.getMark(to, "@@joy__huxiao-turn"), player.id)
+    return table.contains(to:getTableMark("@@joy__huxiao-turn"), player.id)
   end,
 }
 joy__huxiao:addRelatedSkill(joy__huxiao_targetmod)
@@ -314,7 +314,7 @@ Fk:loadTranslationTable{
 
 local xizhicai = General(extension, "joy__xizhicai", "wei", 3)
 local updataXianfu = function (room, player, target)
-  local mark = U.getMark(player, "xianfu")
+  local mark = player:getTableMark("xianfu")
   table.insertIfNeed(mark[2], target.id)
   room:setPlayerMark(player, "xianfu", mark)
   local names = table.map(mark[2], function(pid) return Fk:translate(room:getPlayerById(pid).general) end)
@@ -350,7 +350,7 @@ local chouce = fk.CreateTriggerSkill{
       local tos = room:askForChoosePlayers(player, targets, 1, 1, "#joy__chouce-draw", self.name, false)
       local to = room:getPlayerById(tos[1])
       local num = 1
-      local mark = U.getMark(player, "xianfu")
+      local mark = player:getTableMark("xianfu")
       if #mark > 0 and table.contains(mark[1], to.id) then
         num = 2
         updataXianfu (room, player, to)
@@ -794,7 +794,7 @@ local joy__xingwu = fk.CreateActiveSkill{
       room:throwCard({id}, self.name, target, player)
     end
     if target.dead then return end
-    local n = target.gender == General.Male and 2 or 1
+    local n = target:isMale() and 2 or 1
     room:damage{
       from = player,
       to = target,
@@ -852,7 +852,7 @@ local joy__huimou = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     local room = player.room
     local to = room:askForChoosePlayers(player, table.map(table.filter(room.alive_players, function(p)
-      return not p.faceup end), function(p) return p.id end),
+      return not p.faceup end), Util.IdMapper),
       1, 1, "#joy__huimou-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
@@ -890,7 +890,7 @@ local joy__jinghong = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     local room = player.room
     local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
-      return not p:isKongcheng() end), function(p) return p.id end)
+      return not p:isKongcheng() end), Util.IdMapper)
     local n = math.min(#room.alive_players - 1, 4)
     local tos = room:askForChoosePlayers(player, targets, 1, n, "#joy__jinghong-choose:::"..n, self.name, true)
     if #tos > 0 then

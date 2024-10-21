@@ -187,7 +187,7 @@ local joy__longnu = fk.CreateTriggerSkill{
   on_use = function(self, event, target, player, data)
     local room = player.room
     local choice = room:askForChoice(player, {"joy__longnu_red", "joy__longnu_black"}, self.name)
-    local mark = U.getMark(player, "@joy__longnu-turn")
+    local mark = player:getTableMark("@joy__longnu-turn")
     local color = string.sub(choice, 13, -1)
     table.insertIfNeed(mark, color)
     room:setPlayerMark(player, "@joy__longnu-turn", mark)
@@ -207,7 +207,7 @@ local joy__longnu_filter = fk.CreateFilterSkill{
   name = "#joy__longnu_filter",
   card_filter = function(self, card, player)
     if player:hasSkill("joy__longnu") and table.contains(player.player_cards[Player.Hand], card.id) then
-      local mark = U.getMark(player, "@joy__longnu-turn")
+      local mark = player:getTableMark("@joy__longnu-turn")
       return table.contains(mark, card:getColorString())
     end
   end,
@@ -2011,7 +2011,7 @@ local duorui = fk.CreateTriggerSkill{
     local id = room:askForCardChosen(player, to, { card_data = { { "$Hand", to.player_cards[Player.Hand] } } }, self.name)
     local color = Fk:getCardById(id):getColorString()
     if color ~= "nocolor" then
-      local mark = U.getMark(to, "@joy__duorui-turn")
+      local mark = to:getTableMark("@joy__duorui-turn")
       table.insertIfNeed(mark, color)
       room:setPlayerMark(to, "@joy__duorui-turn", mark)
     end
@@ -2025,14 +2025,14 @@ local duorui_trigger = fk.CreateTriggerSkill{
   can_trigger = function(self, event, target, player, data)
     return target == player and player == player.room.current
     and table.find(player.room.alive_players, function (p)
-      return table.contains(U.getMark(p, "@joy__duorui-turn"), data.card:getColorString())
+      return table.contains(p:getTableMark("@joy__duorui-turn"), data.card:getColorString())
     end)
   end,
   on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     data.disresponsiveList = data.disresponsiveList or {}
     for _, p in ipairs(player.room.alive_players) do
-      if table.contains(U.getMark(p, "@joy__duorui-turn"), data.card:getColorString()) then
+      if table.contains(p:getTableMark("@joy__duorui-turn"), data.card:getColorString()) then
         table.insertIfNeed(data.disresponsiveList, p.id)
       end
     end
