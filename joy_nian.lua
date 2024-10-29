@@ -116,7 +116,7 @@ local tazhen = fk.CreateTriggerSkill{
     room:doIndicate(player.id, victims)
     victims = table.map(victims, Util.Id2PlayerMapper)
     if not table.contains(record, "main") then
-      local mark = U.getMark(player, "joy__tazhen_target")
+      local mark = player:getTableMark("joy__tazhen_target")
       for _, p in ipairs(victims) do
         if not p.dead and table.insertIfNeed(mark, p.id) then
           room:addPlayerMark(p, "@@joy__tazhen")
@@ -167,7 +167,7 @@ local tazhen = fk.CreateTriggerSkill{
 local tazhen_prohibit = fk.CreateProhibitSkill{
   name = "#joy__tazhen_prohibit",
   is_prohibited = function(self, from, to, card)
-    return from and to and table.contains(U.getMark(to, "joy__tazhen_target") ,from.id) and card and card.trueName == "slash"
+    return from and to and table.contains(to:getTableMark("joy__tazhen_target") ,from.id) and card and card.trueName == "slash"
   end,
 }
 tazhen:addRelatedSkill(tazhen_prohibit)

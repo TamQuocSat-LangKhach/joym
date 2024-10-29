@@ -700,7 +700,7 @@ local joy__xiecui = fk.CreateTriggerSkill{
   can_trigger = function(self, event, target, player, data)
     if player:hasSkill(self) and target and not target.dead and target == player.room.current and data.card then
       return player:usedSkillTimes(self.name, Player.HistoryTurn) == 0 and
-      #U.getActualDamageEvents(player.room, 1, function(e) return e.data[1].from == target end) == 0
+      #player.room.logic:getActualDamageEvents(1, function(e) return e.data[1].from == target end) == 0
     end
   end,
   on_cost = function(self, event, target, player, data)

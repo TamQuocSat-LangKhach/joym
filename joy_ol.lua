@@ -422,7 +422,7 @@ local fuji = fk.CreateTriggerSkill{
       table.find(player.room:getOtherPlayers(player), function(p) return not p:isRemoved() and p:distanceTo(player) < 3 end)
     else
       return target == player and player:hasSkill(self) and data.to ~= player and not data.to.dead
-      and not table.contains(U.getMark(player, "joy__fuji_record"), data.to.id)
+      and not table.contains(player:getTableMark("joy__fuji_record"), data.to.id)
     end
   end,
   on_use = function(self, event, target, player, data)
@@ -437,7 +437,7 @@ local fuji = fk.CreateTriggerSkill{
     else
       room:addPlayerMark(data.to, "@@joyfuji")
       room:addPlayerMark(data.to, MarkEnum.UncompulsoryInvalidity)
-      local mark = U.getMark(player, "joy__fuji_record")
+      local mark = player:getTableMark("joy__fuji_record")
       table.insert(mark, data.to.id)
       room:setPlayerMark(player, "joy__fuji_record", mark)
     end
@@ -454,7 +454,7 @@ local fuji = fk.CreateTriggerSkill{
   end,
   on_refresh = function(self, event, target, player, data)
     local room = player.room
-    for _, pid in ipairs(U.getMark(player, "joy__fuji_record")) do
+    for _, pid in ipairs(player:getTableMark("joy__fuji_record")) do
       local p = room:getPlayerById(pid)
       room:removePlayerMark(p, "@@joyfuji")
       room:removePlayerMark(p,MarkEnum.UncompulsoryInvalidity)

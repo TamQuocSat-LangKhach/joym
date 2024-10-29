@@ -1114,7 +1114,7 @@ local huairou = fk.CreateActiveSkill{
     if player.dead then return end
     local allCardMapper = {}
     local allCardNames = {}
-    local mark = U.getMark(player, "joy__huairou-turn")
+    local mark = player:getTableMark("joy__huairou-turn")
     for _, id in ipairs(Fk:getAllCardIds()) do
       local card = Fk:getCardById(id)
       if not table.contains(mark, card.name) and card.type ~= Card.TypeEquip and (room:getCardArea(id) == Card.DrawPile or room:getCardArea(id) == Card.DiscardPile) then
@@ -1169,14 +1169,14 @@ local joy__juzhan = fk.CreateTriggerSkill{
         if from.dead then return end
         from:drawCards(1, self.name)
         if from.dead then return end
-        local mark = U.getMark(from, "@@joy__juzhan-turn")
+        local mark = from:getTableMark("@@joy__juzhan-turn")
         table.insertIfNeed(mark, player.id)
         room:setPlayerMark(from, "@@joy__juzhan-turn", mark)
     else
         room:notifySkillInvoked(player, self.name, "control")
         local to = room:getPlayerById(data.to)
         room:moveCardTo(room:askForCardChosen(player, to, "he", self.name), Card.PlayerHand, player, fk.ReasonPrey, self.name, "", false, player.id)
-        local mark = U.getMark(player, "joy__juzhan_red-turn")
+        local mark = player:getTableMark("joy__juzhan_red-turn")
         table.insertIfNeed(mark, to.id)
         room:setPlayerMark(player, "joy__juzhan_red-turn", mark)
     end
@@ -1185,8 +1185,8 @@ local joy__juzhan = fk.CreateTriggerSkill{
 local joy__juzhan_prohibit = fk.CreateProhibitSkill{
   name = "#joy__juzhan_prohibit",
   is_prohibited = function(self, from, to, card)
-    return table.contains(U.getMark(from, "@@joy__juzhan-turn"), to.id)
-    or (card and card.color == Card.Red and card.trueName == "slash" and table.contains(U.getMark(from, "joy__juzhan_red-turn"), to.id))
+    return table.contains(from:getTableMark("@@joy__juzhan-turn"), to.id)
+    or (card and card.color == Card.Red and card.trueName == "slash" and table.contains(from:getTableMark("joy__juzhan_red-turn"), to.id))
   end,
 }
 joy__juzhan:addRelatedSkill(joy__juzhan_prohibit)

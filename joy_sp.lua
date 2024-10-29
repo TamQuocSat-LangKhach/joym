@@ -235,7 +235,7 @@ local joy__wuji = fk.CreateTriggerSkill{
   end,
   can_wake = function(self, event, target, player, data)
     local n = 0
-    U.getActualDamageEvents(player.room, 1, function(e)
+    player.room.logic:getActualDamageEvents(1, function(e)
       local damage = e.data[1]
       n = n + damage.damage
       if n > 2 then return true end
