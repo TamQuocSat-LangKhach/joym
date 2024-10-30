@@ -578,7 +578,7 @@ local zhenyi_trigger = fk.CreateTriggerSkill {
   events = {fk.AskForRetrial, fk.DamageCaused, fk.Damaged},
   mute = true,
   can_trigger = function(self, event, target, player, data)
-    if player:hasSkill(zhenyi.name) then
+    if player:hasSkill(zhenyi) then
       if event == fk.AskForRetrial then
         return player:getMark("@@faluspade") > 0
       elseif event == fk.DamageCaused then

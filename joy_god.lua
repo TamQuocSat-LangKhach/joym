@@ -302,7 +302,7 @@ local joy__meihun = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.EventPhaseStart, fk.TargetConfirmed},
   can_trigger = function(self, event, target, player, data)
-    if target == player and player:hasSkill(self.name) then
+    if target == player and player:hasSkill(self) then
       if event == fk.EventPhaseStart then
         return player.phase == Player.Finish
       elseif event == fk.TargetConfirmed then
@@ -1642,7 +1642,7 @@ local gn_jieying = fk.CreateTriggerSkill{
   end,
   on_refresh = function(self, event, target, player, data)
     local room = player.room
-    if table.every(room.alive_players, function (p) return not p:hasSkill(self.name, true) end) then
+    if table.every(room.alive_players, function (p) return not p:hasSkill(self, true) end) then
       room:setPlayerMark(player, "@@joy__jieying_camp", 0)
     end
   end,
@@ -1651,7 +1651,7 @@ local gn_jieying_targetmod = fk.CreateTargetModSkill{
   name = "#joy__gn_jieying_targetmod",
   residue_func = function(self, player, skill, scope)
     if skill.trueName == "slash_skill" and player:getMark("@@joy__jieying_camp") > 0 and scope == Player.HistoryPhase then
-      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying) end)
     end
   end,
 }
@@ -1659,7 +1659,7 @@ local gn_jieying_maxcards = fk.CreateMaxCardsSkill{
   name = "#joy__gn_jieying_maxcards",
   correct_func = function(self, player)
     if player:getMark("@@joy__jieying_camp") > 0 then
-      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying.name) end)
+      return #table.filter(Fk:currentRoom().alive_players, function (p) return p:hasSkill(gn_jieying) end)
     else
       return 0
     end

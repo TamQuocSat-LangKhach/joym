@@ -359,7 +359,7 @@ local joy__zhiyu = fk.CreateTriggerSkill{
   anim_type = "masochism",
   events = {fk.Damaged},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name)
+    return target == player and player:hasSkill(self)
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
@@ -500,7 +500,7 @@ local joy__zhuikong = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.TurnStart},
   can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self.name) and target ~= player and not player:isKongcheng() and not target:isKongcheng()
+    return player:hasSkill(self) and target ~= player and not player:isKongcheng() and not target:isKongcheng()
   end,
   on_cost = function(self, event, target, player, data)
     return player.room:askForSkillInvoke(player, self.name, data, "#joy__zhuikong-invoke::"..target.id)
@@ -535,7 +535,7 @@ local joy__qiuyuan = fk.CreateTriggerSkill{
   anim_type = "control",
   events = {fk.TargetConfirming},
   can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self.name) and data.card.trueName == "slash"
+    return target == player and player:hasSkill(self) and data.card.trueName == "slash"
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
@@ -1141,18 +1141,18 @@ local wengua_trigger = fk.CreateTriggerSkill{
   refresh_events = {fk.GameStart, fk.EventAcquireSkill, fk.EventLoseSkill, fk.Deathed},
   can_refresh = function(self, event, target, player, data)
     if event == fk.GameStart then
-      return player:hasSkill(self.name, true)
+      return player:hasSkill(self, true)
     elseif event == fk.EventAcquireSkill or event == fk.EventLoseSkill then
       return data == self and not table.find(player.room:getOtherPlayers(player), function(p) return p:hasSkill("joy__wengua", true) end)
     else
-      return target == player and player:hasSkill(self.name, true, true) and
+      return target == player and player:hasSkill(self, true, true) and
         not table.find(player.room:getOtherPlayers(player), function(p) return p:hasSkill("joy__wengua", true) end)
     end
   end,
   on_refresh = function(self, event, target, player, data)
     local room = player.room
     if event == fk.GameStart or event == fk.EventAcquireSkill then
-      if player:hasSkill(self.name, true) then
+      if player:hasSkill(self, true) then
         for _, p in ipairs(room:getOtherPlayers(player)) do
           room:handleAddLoseSkills(p, "joy__wengua&", nil, false, true)
         end
