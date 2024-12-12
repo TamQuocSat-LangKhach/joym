@@ -14,9 +14,6 @@ local joyex__tianxiang = fk.CreateTriggerSkill{
   name = "joyex__tianxiang",
   anim_type = "defensive",
   events = {fk.DamageInflicted},
-  can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self) and target == player
-  end,
   on_cost = function(self, event, target, player, data)
     local tar, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
       return p.id end), 1, 1, ".|.|heart|hand", "#joyex__tianxiang-choose", self.name, true)
@@ -82,9 +79,6 @@ local joyex__kuanggu = fk.CreateTriggerSkill{
   name = "joyex__kuanggu",
   anim_type = "drawcard",
   events = {fk.Damage},
-  can_trigger = function(self, event, target, player, data)
-    return player:hasSkill(self) and target == player
-  end,
   on_trigger = function(self, event, target, player, data)
     self.cancel_cost = false
     for i = 1, data.damage do
@@ -496,9 +490,6 @@ local fangzhu = fk.CreateTriggerSkill{
   name = "joy__fangzhu",
   anim_type = "masochism",
   events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
   on_cost = function(self, event, target, player, data)
     local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__fangzhu-choose", self.name, true)
     if #to > 0 then

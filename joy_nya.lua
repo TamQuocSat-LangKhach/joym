@@ -362,9 +362,7 @@ local nya__xianzhou_trigger = fk.CreateTriggerSkill{
   can_trigger = function(self, event, target, player, data)
     return target == player and player:usedSkillTimes("nya__xianzhou", Player.HistoryGame) > 0 and data.name == "nya__play"
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     player:setSkillUseHistory("nya__xianzhou", 0, Player.HistoryGame)
   end,
@@ -450,9 +448,7 @@ local nya__qiangwu_trigger = fk.CreateTriggerSkill{
     return target == player and player:hasSkill("nya__qiangwu") and data.card and data.card.trueName == "slash" and
       player:hasSkill("nya__play", true)
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     local room = player.room
     player:broadcastSkillInvoke("nya__qiangwu")
@@ -1157,12 +1153,7 @@ local nya__jueqing = fk.CreateTriggerSkill{
   name = "nya__jueqing",
   anim_type = "offensive",
   events = {fk.PreDamage},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     local room = player.room
     if room:askForSkillInvoke(player, self.name, nil, "#nya__jueqing-invoke::"..data.to.id..":"..data.damage) then
@@ -1196,9 +1187,7 @@ local nya__shangshi = fk.CreateTriggerSkill{
       end
     end
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     if event == fk.EventAcquireSkill then
       player.room:changeMaxHp(player, -1)

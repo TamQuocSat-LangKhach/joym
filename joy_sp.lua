@@ -597,9 +597,7 @@ local joy__yanxiao_trigger = fk.CreateTriggerSkill{
   can_trigger = function(self, event, target, player, data)
     return target == player and player.phase == Player.Judge and player:hasDelayedTrick("yanxiao_trick")
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     local room = player.room
     player:broadcastSkillInvoke("joy__yanxiao")
@@ -1354,9 +1352,6 @@ local biyue = fk.CreateTriggerSkill{
   name = "joysp__biyue",
   anim_type = "drawcard",
   events = {fk.TurnEnd},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self) 
-  end,
   on_use = function(self, event, target, player, data)
     local n = 1
     if not player.faceup then
@@ -1384,9 +1379,6 @@ local jilei = fk.CreateTriggerSkill{
   name = "joy__jilei",
   anim_type = "masochism",
   events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
   on_cost = function(self, event, target, player, data)
     return player.room:askForSkillInvoke(player, self.name, nil,
     (data.from and not data.from.dead) and ("#joy__jilei-invoke::"..data.from.id) or "#joy__jilei-draw")

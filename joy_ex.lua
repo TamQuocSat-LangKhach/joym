@@ -143,9 +143,6 @@ local joyex__fankui = fk.CreateTriggerSkill{
   name = "joyex__fankui",
   anim_type = "masochism",
   events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
   on_trigger = function(self, event, target, player, data)
     self.cancel_cost = false
     for i = 1, data.damage do
@@ -1007,9 +1004,7 @@ local joyex__biyue = fk.CreateTriggerSkill{
   can_trigger = function(self, event, target, player, data)
     return target == player and player:hasSkill(self) and player.phase == Player.Finish
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     player:drawCards(1 + player:usedSkillTimes("joyex__lijian", Player.HistoryTurn), self.name)
   end,

@@ -16,9 +16,6 @@ local joy__shixian = fk.CreateTriggerSkill{
   events = {fk.TurnStart},
   anim_type = "drawcard",
   frequency = Skill.Compulsory,
-  can_trigger = function(self, _, target, player, data)
-    return player:hasSkill(self) and target == player
-  end,
   on_use = function(self, _, target, player, data)
     local room = player.room
     local names = {"joy__xiakexing", "joy__qiangjinjiu", "joy__jingyesi", "joy__xinglunan"}

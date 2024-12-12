@@ -358,9 +358,6 @@ local joy__zhiyu = fk.CreateTriggerSkill{
   name = "joy__zhiyu",
   anim_type = "masochism",
   events = {fk.Damaged},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
   on_use = function(self, event, target, player, data)
     local room = player.room
     player:drawCards(2, self.name)
@@ -632,9 +629,7 @@ local joy__kuangbi_trigger = fk.CreateTriggerSkill {
       end
     end
   end,
-  on_cost = function(self, event, target, player, data)
-    return true
-  end,
+  on_cost = Util.TrueFunc,
   on_use = function(self, event, target, player, data)
     local room = player.room
     player:broadcastSkillInvoke("joy__kuangbi")
@@ -828,9 +823,6 @@ local joyex__dangxian = fk.CreateTriggerSkill{
   name = "joyex__dangxian",
   anim_type = "offensive",
   events = {fk.TurnStart},
-  can_trigger = function(self, event, target, player, data)
-    return target == player and player:hasSkill(self)
-  end,
   on_use = function(self, event, target, player, data)
     local cards = player.room:getCardsFromPileByRule("slash", 1)
     if #cards > 0 then
