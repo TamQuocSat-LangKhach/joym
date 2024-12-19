@@ -925,9 +925,7 @@ local addTYPingjianSkill = function(player, skill_name)
   local skill = Fk.skills[skill_name]
   if skill == nil or player:hasSkill(skill_name, true) then return false end
   room:handleAddLoseSkills(player, skill_name, nil)
-  local skills = player:getTableMark("joy__pingjian_skills")
-  table.insertIfNeed(skills, skill_name)
-  room:setPlayerMark(player, "joy__pingjian_skills", skills)
+  room:addTableMarkIfNeed(player, "joy__pingjian_skills", skill_name)
   local pingjian_skill_times = player:getTableMark("joy__pingjian_skill_times")
   table.insert(pingjian_skill_times, {skill_name, player:usedSkillTimes(skill_name)})
   for _, s in ipairs(skill.related_skills) do
@@ -942,9 +940,7 @@ local removeTYPingjianSkill = function(player, skill_name)
   local skill = Fk.skills[skill_name]
   if skill == nil then return false end
   room:handleAddLoseSkills(player, "-" .. skill_name, nil)
-  local skills = player:getTableMark("joy__pingjian_skills")
-  table.removeOne(skills, skill_name)
-  room:setPlayerMark(player, "joy__pingjian_skills", skills)
+  room:removeTableMark(player, "joy__pingjian_skills", skill_name)
   local invoked = false
   local pingjian_skill_times = player:getTableMark("joy__pingjian_skill_times")
   local record_copy = {}
@@ -964,9 +960,7 @@ local removeTYPingjianSkill = function(player, skill_name)
   room:setPlayerMark(player, "joy__pingjian_skill_times", record_copy)
 
   if invoked then
-    local used_skills = player:getTableMark("joy__pingjian_used")
-    table.insertIfNeed(used_skills, skill_name)
-    room:setPlayerMark(player, "joy__pingjian_used", used_skills)
+    room:addTableMarkIfNeed(player, "joy__pingjian_used", skill_name)
   end
 end
 

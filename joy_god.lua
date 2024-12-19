@@ -2011,9 +2011,7 @@ local duorui = fk.CreateTriggerSkill{
     local id = room:askForCardChosen(player, to, { card_data = { { "$Hand", to.player_cards[Player.Hand] } } }, self.name)
     local color = Fk:getCardById(id):getColorString()
     if color ~= "nocolor" then
-      local mark = to:getTableMark("@joy__duorui-turn")
-      table.insertIfNeed(mark, color)
-      room:setPlayerMark(to, "@joy__duorui-turn", mark)
+      room:addTableMarkIfNeed(to, "@joy__duorui-turn", color)
     end
     room:moveCardTo(id, Card.PlayerHand, player, fk.ReasonPrey, self.name, nil, true, player.id)
   end,

@@ -182,9 +182,7 @@ local joyex__qiangxi = fk.CreateActiveSkill{
   on_use = function(self, room, effect)
     local player = room:getPlayerById(effect.from)
     local target = room:getPlayerById(effect.tos[1])
-    local mark = player:getTableMark("joyex__qiangxi_targets-phase")
-    table.insertIfNeed(mark, target.id)
-    room:setPlayerMark(player, "joyex__qiangxi_targets-phase", mark)
+    room:addTableMarkIfNeed(player, "joyex__qiangxi_targets-phase", target.id)
     room:loseHp(player, 1, self.name)
     if not player.dead then
       player:drawCards(1, self.name)
@@ -1160,16 +1158,12 @@ local joy__juzhan = fk.CreateTriggerSkill{
         if from.dead then return end
         from:drawCards(1, self.name)
         if from.dead then return end
-        local mark = from:getTableMark("@@joy__juzhan-turn")
-        table.insertIfNeed(mark, player.id)
-        room:setPlayerMark(from, "@@joy__juzhan-turn", mark)
+        room:addTableMarkIfNeed(from, "@@joy__juzhan-turn", player.id)
     else
         room:notifySkillInvoked(player, self.name, "control")
         local to = room:getPlayerById(data.to)
         room:moveCardTo(room:askForCardChosen(player, to, "he", self.name), Card.PlayerHand, player, fk.ReasonPrey, self.name, "", false, player.id)
-        local mark = player:getTableMark("joy__juzhan_red-turn")
-        table.insertIfNeed(mark, to.id)
-        room:setPlayerMark(player, "joy__juzhan_red-turn", mark)
+        room:addTableMarkIfNeed(player, "joy__juzhan_red-turn", to.id)
     end
   end,
 }

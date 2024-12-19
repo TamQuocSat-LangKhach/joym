@@ -314,9 +314,7 @@ local joy__youlong = fk.CreateViewAsSkill{
   end,
   before_use = function(self, player, use)
     local room = player.room
-    local mark = player:getTableMark("@$joy__youlong")
-    table.insert(mark, use.card.trueName)
-    room:setPlayerMark(player, "@$joy__youlong", mark)
+    room:addTableMark(player, "@$joy__youlong", use.card.trueName)
     local state = player:getSwitchSkillState(self.name, true, true)
     room:setPlayerMark(player, "joy__youlong_" .. state .. "-turn", 1)
     if state == "yin" then
@@ -437,9 +435,7 @@ local fuji = fk.CreateTriggerSkill{
     else
       room:addPlayerMark(data.to, "@@joyfuji")
       room:addPlayerMark(data.to, MarkEnum.UncompulsoryInvalidity)
-      local mark = player:getTableMark("joy__fuji_record")
-      table.insert(mark, data.to.id)
-      room:setPlayerMark(player, "joy__fuji_record", mark)
+      room:addTableMark(player, "joy__fuji_record", data.to.id)
     end
   end,
 
