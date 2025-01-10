@@ -16,8 +16,7 @@ local nya__play = fk.CreateTriggerSkill{
   end,
   on_cost = function(self, event, target, player, data)
     if player.phase == Player.Start then
-      local to, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function(p)
-        return p.id end), 1, 1, ".", "#nya__play-choose", self.name, true)
+      local to, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, ".", "#nya__play-choose", self.name, true)
       if #to > 0 and card then
         self.cost_data = {to[1], card}
         return true
@@ -554,7 +553,7 @@ local nya__lieren = fk.CreateTriggerSkill{
       else
         return player.phase == Player.Play and not player:isKongcheng() and
           player:usedSkillTimes("nya__play", Player.HistoryTurn) > 0 and not player:hasSkill("nya__play", true) and
-          table.find(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
+          table.find(player.room:getOtherPlayers(player, false), function(p) return not p:isKongcheng() end)
       end
     end
   end,
@@ -573,7 +572,7 @@ local nya__lieren = fk.CreateTriggerSkill{
         return true
       end
     else
-      local to = room:askForChoosePlayers(player, table.map(table.filter(room:getOtherPlayers(player), function(p)
+      local to = room:askForChoosePlayers(player, table.map(table.filter(room:getOtherPlayers(player, false), function(p)
         return not p:isKongcheng() end), Util.IdMapper),
         1, 1, "#nya__lieren-choose", self.name, true)
       if #to > 0 then
@@ -842,17 +841,16 @@ local nya__tianxiang = fk.CreateTriggerSkill{
     return target == player and player:hasSkill(self) and not player:isKongcheng()
   end,
   on_cost = function(self, event, target, player, data)
-    local to, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function(p)
-      return p.id end), 1, 1, ".|.|heart|hand", "#nya__tianxiang-choose", self.name, true)
+    local to, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, ".|.|heart|hand", "#nya__tianxiang-choose", self.name, true)
     if #to > 0 and card then
-      self.cost_data = {to[1], card}
+      self.cost_data = {tos = to[1], cards = {card} }
       return true
     end
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local to = room:getPlayerById(self.cost_data[1])
-    room:obtainCard(to.id, self.cost_data[2], true, fk.ReasonGive)
+    local to = room:getPlayerById(self.cost_data.tos[1])
+    room:obtainCard(to.id, self.cost_data.cards, true, fk.ReasonGive)
     local damage = table.simpleClone(data)
     damage.to = to
     room:damage(damage)

@@ -218,7 +218,7 @@ local qingjian = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     --- FIXME: fix askForChooseCardsAndPlayers
     local _data = {
-      targets = table.map(player.room:getOtherPlayers(player), Util.IdMapper),
+      targets = table.map(player.room:getOtherPlayers(player, false), Util.IdMapper),
       max_t_num = 1,
       min_t_num = 1,
       max_c_num = 9999,
@@ -513,7 +513,7 @@ local joyex__jizhi = fk.CreateTriggerSkill{
     if card.type == Card.TypeBasic then
       room:addPlayerMark(player, MarkEnum.AddMaxCardsInTurn, 1)
     elseif card.type == Card.TypeEquip and room:getCardOwner(card) == player and room:getCardArea(card) == Player.Hand then
-      local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
+      local targets = table.map(table.filter(room:getOtherPlayers(player, false), function(p)
         return p:hasEmptyEquipSlot(card.sub_type) end), Util.IdMapper)
       if #targets == 0 then return end
       local to = room:askForChoosePlayers(player, targets, 1, 1, "#joyex__jizhi-choose:::"..card:toLogString(), self.name, true)
@@ -824,7 +824,7 @@ local lianying = fk.CreateTriggerSkill{
     local room = player.room
     player:drawCards(2,self.name)
     if player.dead or player:isKongcheng() then return end
-    local tos, card = room:askForChooseCardAndPlayers(player,table.map(player.room:getOtherPlayers(player), Util.IdMapper),
+    local tos, card = room:askForChooseCardAndPlayers(player,table.map(player.room:getOtherPlayers(player, false), Util.IdMapper),
     1,1,".|.|.|hand","#joyex__lianying-choose",self.name,true)
     if #tos > 0 then
       room:moveCardTo(card, Player.Hand, room:getPlayerById(tos[1]), fk.ReasonGive, self.name, nil, false, player.id)
@@ -924,7 +924,7 @@ local jijiu = fk.CreateViewAsSkill{
   after_use = function(self, player, use)
     local room = player.room
     if player.dead then return end
-    local targets = table.filter(room:getOtherPlayers(player), function (p) return not p:isKongcheng() end)
+    local targets = table.filter(room:getOtherPlayers(player, false), function (p) return not p:isKongcheng() end)
     if #targets == 0 then return false end
     local tos = player.room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joyex__jijiu-choose", self.name, true)
     if #tos > 0 then

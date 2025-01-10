@@ -15,8 +15,7 @@ local joyex__tianxiang = fk.CreateTriggerSkill{
   anim_type = "defensive",
   events = {fk.DamageInflicted},
   on_cost = function(self, event, target, player, data)
-    local tar, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player), function (p)
-      return p.id end), 1, 1, ".|.|heart|hand", "#joyex__tianxiang-choose", self.name, true)
+    local tar, card =  player.room:askForChooseCardAndPlayers(player, table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, ".|.|heart|hand", "#joyex__tianxiang-choose", self.name, true)
     if #tar > 0 and card then
       self.cost_data = {tar[1], card}
       return true
@@ -489,7 +488,7 @@ local fangzhu = fk.CreateTriggerSkill{
   anim_type = "masochism",
   events = {fk.Damaged},
   on_cost = function(self, event, target, player, data)
-    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, "#joy__fangzhu-choose", self.name, true)
+    local to = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, "#joy__fangzhu-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
       return true
@@ -597,10 +596,8 @@ local fangquan = fk.CreateTriggerSkill{
   on_refresh = function(self, event, target, player, data)
     local room = player.room
     room:setPlayerMark(player, "joy__fangquan_extra", 0)
-    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), function(p)
-      return p.id end), 1, 1, "#joy__fangquan-give", self.name,false)
+    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, "#joy__fangquan-give", self.name,false)
     room:getPlayerById(tos[1]):gainAnExtraTurn()
-    
   end,
 }
 local ruoyu = fk.CreateTriggerSkill{
@@ -613,7 +610,7 @@ local ruoyu = fk.CreateTriggerSkill{
       player.phase == Player.Start
   end,
   can_wake = function(self, event, target, player, data)
-    return table.every(player.room:getOtherPlayers(player), function(p) return p.hp >= player.hp end)
+    return table.every(player.room:getOtherPlayers(player, false), function(p) return p.hp >= player.hp end)
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
@@ -649,21 +646,23 @@ local jijiang = fk.CreateViewAsSkill{
     end
 
     for _, p in ipairs(room:getOtherPlayers(player)) do
-      if p.kingdom == "shu" then
-        local cardResponded = room:askForResponse(p, "slash", "slash", "#joy__jijiang-ask:" .. player.id, true)
-        if cardResponded then
-          room:responseCard({
-            from = p.id,
-            card = cardResponded,
-            skipDrop = true,
-          })
+      if p:isAlive() then
+        if p.kingdom == "shu" then
+          local cardResponded = room:askForResponse(p, "slash", "slash", "#joy__jijiang-ask:" .. player.id, true)
+          if cardResponded then
+            room:responseCard({
+              from = p.id,
+              card = cardResponded,
+              skipDrop = true,
+            })
 
-          use.card = cardResponded
-          if not p.dead and not player.dead then
-            player:drawCards(1,self.name)
-            p:drawCards(1,self.name)
+            use.card = cardResponded
+            if not p.dead and not player.dead then
+              player:drawCards(1,self.name)
+              p:drawCards(1,self.name)
+            end
+            return
           end
-          return
         end
       end
     end
@@ -712,7 +711,7 @@ local joyex__yinghun = fk.CreateTriggerSkill{
   on_cost = function(self, event, target, player, data)
     local room = player.room
     local n = player:getLostHp()
-    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player), Util.IdMapper),
+    local tos = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player, false), Util.IdMapper),
     1,1,"#joyex__yinghun-choose:::"..n, self.name, true)
     if #tos > 0 then
       local choices =  {"joyex__yinghundraw:::"..n,"joyex__yinghundis:::"..n}
@@ -761,7 +760,7 @@ local wulie = fk.CreateTriggerSkill{
     room:loseHp(player,n,self.name)
     if not player.dead then
       room:addPlayerMark(player,"@joyex__lie",n)
-      local targets = room:askForChoosePlayers(player,table.map(room:getOtherPlayers(player), Util.IdMapper), 1, n,
+      local targets = room:askForChoosePlayers(player,table.map(room:getOtherPlayers(player, false), Util.IdMapper), 1, n,
       "#joyex__wulie-choose:::"..n,self.name,true)
       if #targets > 0 then
         for _, pid in ipairs(targets) do
@@ -862,7 +861,7 @@ local yinghun = fk.CreateTriggerSkill{
     if player:isWounded() then
       prompt = "#joy__yinghun-discard:::"..player:getLostHp()
     end
-    local tos = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, prompt, self.name, true)
+    local tos = player.room:askForChoosePlayers(player, table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, prompt, self.name, true)
     if #tos > 0 then
       self.cost_data = tos[1]
       return true

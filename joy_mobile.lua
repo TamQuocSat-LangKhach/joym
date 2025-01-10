@@ -642,7 +642,7 @@ local mou__qingzheng = fk.CreateTriggerSkill{
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
-    local targets = table.filter(room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
+    local targets = table.filter(room:getOtherPlayers(player, false), function(p) return not p:isKongcheng() end)
     if #targets > 0 then
       local to = room:askForChoosePlayers(player, table.map(targets, Util.IdMapper), 1, 1, "#joy_mou__qingzheng-choose", self.name, true)
       if #to > 0 then

@@ -49,7 +49,7 @@ local joy__shushen_trigger = fk.CreateTriggerSkill{
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
-    local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player),
+    local to = room:askForChoosePlayers(player, table.map(room:getOtherPlayers(player, false),
       Util.IdMapper), 1, 1, "#joy__shushen-choose", self.name, true)
     if #to > 0 then
       self.cost_data = to[1]
@@ -282,7 +282,7 @@ local joyex__qianya = fk.CreateTriggerSkill{
     return target == player and player:hasSkill(self) and data.card.type == Card.TypeTrick and not player:isKongcheng()
   end,
   on_cost = function(self, event, target, player, data)
-    local tos, cards = player.room:askForChooseCardsAndPlayers(player, 1, player:getHandcardNum(), table.map(player.room:getOtherPlayers(player), Util.IdMapper), 1, 1, ".", "#joyex__qianya-invoke", self.name, true)
+    local tos, cards = player.room:askForChooseCardsAndPlayers(player, 1, player:getHandcardNum(), table.map(player.room:getOtherPlayers(player, false), Util.IdMapper), 1, 1, ".", "#joyex__qianya-invoke", self.name, true)
     if #tos > 0 and #cards > 0 then
       self.cost_data = {tos[1], cards}
       return true
@@ -883,11 +883,11 @@ local joy__jinghong = fk.CreateTriggerSkill{
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
     return target == player and player:hasSkill(self) and player.phase == Player.Start and
-      table.find(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
+      table.find(player.room:getOtherPlayers(player, false), function(p) return not p:isKongcheng() end)
   end,
   on_cost = function(self, event, target, player, data)
     local room = player.room
-    local targets = table.map(table.filter(room:getOtherPlayers(player), function(p)
+    local targets = table.map(table.filter(room:getOtherPlayers(player, false), function(p)
       return not p:isKongcheng() end), Util.IdMapper)
     local n = math.min(#room.alive_players - 1, 4)
     local tos = room:askForChoosePlayers(player, targets, 1, n, "#joy__jinghong-choose:::"..n, self.name, true)

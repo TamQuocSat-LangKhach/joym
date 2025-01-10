@@ -236,11 +236,11 @@ local fujian = fk.CreateTriggerSkill {
   events = {fk.EventPhaseStart},
   can_trigger = function(self, event, target, player, data)
     return target == player and player:hasSkill(self) and player.phase == Player.Finish and
-      table.find(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
+      table.find(player.room:getOtherPlayers(player, false), function(p) return not p:isKongcheng() end)
   end,
   on_use = function(self, event, target, player, data)
     local room = player.room
-    local targets = table.filter(player.room:getOtherPlayers(player), function(p) return not p:isKongcheng() end)
+    local targets = table.filter(player.room:getOtherPlayers(player, false), function(p) return not p:isKongcheng() end)
     local to = table.random(targets)
     room:doIndicate(player.id, {to.id})
     U.viewCards(player, table.random(to.player_cards[Player.Hand], 1), self.name, "$ViewCardsFrom:"..to.id)
@@ -417,7 +417,7 @@ local fuji = fk.CreateTriggerSkill{
     if event == fk.CardUsing then
       return target == player and player:hasSkill(self) and not player:isRemoved() and
       (data.card.trueName == "slash" or data.card:isCommonTrick()) and
-      table.find(player.room:getOtherPlayers(player), function(p) return not p:isRemoved() and p:distanceTo(player) < 3 end)
+      table.find(player.room:getOtherPlayers(player, false), function(p) return not p:isRemoved() and p:distanceTo(player) < 3 end)
     else
       return target == player and player:hasSkill(self) and data.to ~= player and not data.to.dead
       and not table.contains(player:getTableMark("joy__fuji_record"), data.to.id)
@@ -427,8 +427,8 @@ local fuji = fk.CreateTriggerSkill{
     local room = player.room
     if event == fk.CardUsing then
       data.disresponsiveList = data.disresponsiveList or {}
-      for _, p in ipairs(room:getOtherPlayers(player)) do
-        if not p:isRemoved() and p:distanceTo(player) < 3 then
+      for _, p in ipairs(room:getOtherPlayers(player, false)) do
+        if not p:isRemoved() and p:compareDistance(player, 3, "<") then
           table.insertIfNeed(data.disresponsiveList, p.id)
         end
       end
@@ -465,7 +465,7 @@ local jiaozi = fk.CreateTriggerSkill{
   frequency = Skill.Compulsory,
   can_trigger = function(self, event, target, player, data)
     return target == player and player:hasSkill(self) and
-      table.every(player.room:getOtherPlayers(player), function(p)
+      table.every(player.room:getOtherPlayers(player, false), function(p)
         return player:getHandcardNum() >= p:getHandcardNum() end)
   end,
   on_use = function(self, event, target, player, data)
