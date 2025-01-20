@@ -289,11 +289,7 @@ local joy__huoji__fireAttackSkill = fk.CreateActiveSkill{
   mod_target_filter = function(_, to_select, _, _, _, _)
     return not Fk:currentRoom():getPlayerById(to_select):isKongcheng()
   end,
-  target_filter = function(self, to_select, selected, _, card)
-    if #selected < self:getMaxTargetNum(Self, card) then
-      return self:modTargetFilter(to_select, selected, Self.id, card)
-    end
-  end,
+  target_filter = Util.TargetFilter,
   on_effect = function(self, room, cardEffectEvent)
     local from = room:getPlayerById(cardEffectEvent.from)
     local to = room:getPlayerById(cardEffectEvent.to)
